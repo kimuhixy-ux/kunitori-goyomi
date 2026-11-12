@@ -1,5 +1,5 @@
 [
-  { "id": "oda", "name": "織田", "color": "#d1382e", "ink": "#fff", "player": true },
+  { "id": "oda", "name": "織田", "color": "#d1382e", "ink": "#fff", "player": true, "aggression": 1.15, "army": 0.7 },
   { "id": "imagawa", "name": "今川", "color": "#8a5cc0", "ink": "#fff", "aggression": 1.15, "army": 0.7 },
   { "id": "takeda", "name": "武田", "color": "#c9a227", "ink": "#222", "aggression": 1.0, "army": 0.8 },
   { "id": "hojo", "name": "北条", "color": "#2f8f6e", "ink": "#fff", "aggression": 1.35, "army": 0.7 },

@@ -172,3 +172,6 @@ main { max-width: 520px; margin: 0 auto; padding: 8px 16px 0; }
 .actions .next { display: block; max-width: 488px; margin: 0 auto; }
 
 .big { font-size: 36px; font-weight: 800; color: var(--accent); margin: 4px 0; }
+
+/* 大名選びのボタンでは家の色を名前の前に並べる */
+.cmd .dot { display: inline-block; margin-right: 6px; vertical-align: -1px; }

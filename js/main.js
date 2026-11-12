@@ -8,7 +8,7 @@ const DATA_FILES = { clans: 'data/clans.json', provinces: 'data/provinces.json',
 // 保存の形を変えたら番号を上げ、古い保存を読みこまないようにする
 const SAVE_KEY = 'kunitori-goyomi-save-v1';
 
-const state = { game: null, selectedId: null, log: [], report: null, confirmReset: false };
+const state = { data: null, game: null, picking: false, selectedId: null, log: [], report: null, confirmReset: false };
 
 const $status = document.getElementById('status');
 const $map = document.getElementById('map');
@@ -77,6 +77,11 @@ function clearSave() {
 
 // 命令も季節送りも最後は必ずここを通るので、ここで自動保存する
 function render() {
+  $reset.hidden = state.picking;
+  if (state.picking) {
+    renderPicker();
+    return;
+  }
   writeSave();
   renderStatus();
   renderMap($map, state.game, state.selectedId, selectProvince);
@@ -144,6 +149,41 @@ function onReset() {
   }
 }
 
+// 大名選びの間は織田家を仮に置いた盤面を見せる。保存はまだしない
+function renderPicker() {
+  const { game } = state;
+  $status.replaceChildren(el('div', {}, [el('dt', { text: '暦' }), el('dd', { text: `${game.year}年 ${G.seasonName(game)}` })]));
+  renderMap($map, { ...game, player: null }, null, () => {});
+  $next.disabled = true;
+  const clans = game.data.clans
+    .map((c) => ({ c, ps: G.provincesOf(game, c.id) }))
+    .sort((a, b) => sum(b.ps, 'koku') - sum(a.ps, 'koku'));
+  $panel.replaceChildren(
+    el('h2', { text: '大名を選ぶ' }),
+    el('p', { text: `どの家で天下をめざすか選ぶ。京（山城）を含めて${game.data.rules.victory.provinces}か国を治めれば勝ち。石高の多い順に並べてある。` }),
+    el('div', { className: 'commands' }, clans.map(({ c, ps }) => clanButton(c, ps))),
+  );
+}
+
+function sum(list, key) {
+  return list.reduce((total, p) => total + p[key], 0);
+}
+
+function clanButton(c, ps) {
+  const names = ps.map((p) => p.name + (p.capital ? '（京）' : '')).join('・');
+  return el('button', { className: 'cmd', type: 'button', onclick: () => pickClan(c.id) }, [
+    el('span', { className: 'dot', style: `background:${c.color}` }),
+    `${c.name}家`,
+    el('span', { className: 'sub', text: `${names}　石高 ${sum(ps, 'koku')}万石　兵 ${fmt(sum(ps, 'troops'))}` }),
+  ]);
+}
+
+function pickClan(id) {
+  Object.assign(state, { game: G.createGame(state.data, id), picking: false, selectedId: null, report: null, log: [] });
+  render();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
 function renderReport() {
   const r = state.report;
   const head = r.won ? `${r.to}を奪った！` : `${r.to}を落とせなかった`;
@@ -159,7 +199,7 @@ function renderResult() {
   const win = game.result === 'win';
   $panel.replaceChildren(
     el('p', { className: 'big', text: win ? '天下布武' : '落城' }),
-    el('p', { text: win ? `${game.year}年、京を押さえ天下に号令した。` : `${game.year}年、織田家は滅んだ。` }),
+    el('p', { text: win ? `${game.year}年、京を押さえ天下に号令した。` : `${game.year}年、${G.clanInfo(game, game.player).name}家は滅んだ。` }),
     el('button', { className: 'next', type: 'button', text: 'はじめから', onclick: () => start(true) }),
   );
 }
@@ -270,13 +310,14 @@ function nextSeason() {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-// 保存があれば続きから。fresh のときは保存を消して最初から始める
+// 保存があれば続きから。保存がないときと fresh のときは、保存を消して大名選びから始める
 async function start(fresh = false) {
-  const game = G.createGame(await loadData());
+  state.data ??= await loadData();
+  const game = G.createGame(state.data);
   if (fresh) clearSave();
   const saved = fresh ? null : readSave();
   if (saved?.game) G.restore(game, saved.game);
-  Object.assign(state, { game, selectedId: null, report: null, log: saved?.log ?? [], confirmReset: false });
+  Object.assign(state, { game, picking: !saved?.game, selectedId: null, report: null, log: saved?.log ?? [], confirmReset: false });
   render();
 }
 

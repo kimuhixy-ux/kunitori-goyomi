@@ -1,7 +1,8 @@
 // 国と大名家の状態、命令ひとつひとつのルールを置く。プレイヤーも CPU も同じ命令を使う
 import { fight } from './battle.js';
 
-export function createGame(data) {
+// playerId を省くと clans.json で player の印がついた家（織田）になる。古い保存を読むときのため
+export function createGame(data, playerId = data.clans.find((c) => c.player).id) {
   const provinces = data.provinces.provinces.map((p) => ({ ...p, baseKoku: p.koku, acted: false, busy: 0, adj: [] }));
   for (const [a, b] of data.provinces.edges) {
     provinces.find((p) => p.id === a).adj.push(b);
@@ -10,13 +11,13 @@ export function createGame(data) {
   const clans = {};
   for (const c of data.clans) clans[c.id] = { rice: 0, alive: true };
   for (const p of provinces) clans[p.clan].rice += Math.round(p.koku * data.rules.startRicePerKoku);
-  const player = data.clans.find((c) => c.player).id;
-  return { data, provinces, clans, player, year: data.rules.startYear, season: 0, result: null };
+  return { data, provinces, clans, player: playerId, year: data.rules.startYear, season: 0, result: null };
 }
 
 // 保存するのは遊んでいるうちに変わる値だけ。地図や大名の設定は毎回 data/*.json から読み直す
 export function snapshot(game) {
   return {
+    player: game.player,
     year: game.year,
     season: game.season,
     result: game.result,
@@ -26,7 +27,7 @@ export function snapshot(game) {
 }
 
 export function restore(game, snap) {
-  Object.assign(game, { year: snap.year, season: snap.season, result: snap.result });
+  Object.assign(game, { player: snap.player ?? game.player, year: snap.year, season: snap.season, result: snap.result });
   for (const [id, c] of Object.entries(snap.clans)) {
     if (game.clans[id]) Object.assign(game.clans[id], c);
   }
