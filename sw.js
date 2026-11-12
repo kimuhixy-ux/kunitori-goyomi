@@ -1,5 +1,5 @@
 // データやコードを更新したら必ず番号を上げる（上げ忘れると端末に古い版が残る）
-const CACHE = 'kunitori-goyomi-v8';
+const CACHE = 'kunitori-goyomi-v9';
 const ASSETS = [
   './',
   'index.html',
@@ -14,6 +14,7 @@ const ASSETS = [
   'data/provinces.json',
   'data/rules.json',
   'data/coast.json',
+  'data/generals.json',
   'manifest.webmanifest',
   'icons/icon.svg',
   'icons/icon-180.png',

@@ -11,7 +11,8 @@ export function createGame(data, playerId = data.clans.find((c) => c.player).id)
   const clans = {};
   for (const c of data.clans) clans[c.id] = { rice: 0, alive: true };
   for (const p of provinces) clans[p.clan].rice += Math.round(p.koku * data.rules.startRicePerKoku);
-  return { data, provinces, clans, player: playerId, year: data.rules.startYear, season: 0, result: null };
+  const generals = data.generals.map((g) => ({ ...g, alive: true }));
+  return { data, provinces, clans, generals, player: playerId, year: data.rules.startYear, season: 0, result: null };
 }
 
 // 保存するのは遊んでいるうちに変わる値だけ。地図や大名の設定は毎回 data/*.json から読み直す
@@ -23,6 +24,7 @@ export function snapshot(game) {
     result: game.result,
     clans: game.clans,
     provinces: game.provinces.map(({ id, clan, koku, troops, acted, busy }) => ({ id, clan, koku, troops, acted, busy })),
+    generals: game.generals.map(({ id, clan, loc, alive }) => ({ id, clan, loc, alive })),
   };
 }
 
@@ -34,6 +36,11 @@ export function restore(game, snap) {
   for (const s of snap.provinces) {
     const p = province(game, s.id);
     if (p) Object.assign(p, s);
+  }
+  // 武将が入る前の保存では、武将は最初の配置のまま
+  for (const s of snap.generals ?? []) {
+    const g = game.generals.find((x) => x.id === s.id);
+    if (g) Object.assign(g, s);
   }
   return game;
 }
@@ -75,6 +82,30 @@ export function snowedIn(game, p) {
   return isWinter(game) && p.snow;
 }
 
+// その国にいる自分の家の武将。統率の高い順に並べ、先頭を大将や守将にする
+export function generalsIn(game, p) {
+  return game.generals.filter((g) => g.alive && g.loc === p.id && g.clan === p.clan).sort((a, b) => b.lead - a.lead);
+}
+
+// 国の働きは、その国にいる武将のうちいちばん得意な者の能力で決まる。武将がいなければ並以下の値
+function bestStat(game, p, key) {
+  return Math.max(game.data.rules.generals.noneStat, ...generalsIn(game, p).map((g) => g[key]));
+}
+
+// 統率50で1倍。統率100なら1.25倍、武将なしなら0.9倍
+function leadFactor(lead) {
+  return 0.75 + lead / 200;
+}
+
+export function attackFactor(game, p, commander = generalsIn(game, p)[0]) {
+  return leadFactor(commander?.lead ?? game.data.rules.generals.noneStat);
+}
+
+// 政務50で表どおりの費用。政務が高いほど安く、低いほど高くつく
+export function developCost(game, p) {
+  return Math.round(game.data.rules.develop.cost * (1.5 - bestStat(game, p, 'admin') / 100));
+}
+
 function useAction(game, p) {
   p.acted = true;
   if (isBusySeason(game)) p.busy += 1;
@@ -82,12 +113,12 @@ function useAction(game, p) {
 
 export function canDevelop(game, p) {
   const { develop } = game.data.rules;
-  return !p.acted && p.koku < p.baseKoku * develop.maxRate && game.clans[p.clan].rice >= develop.cost;
+  return !p.acted && p.koku < p.baseKoku * develop.maxRate && game.clans[p.clan].rice >= developCost(game, p);
 }
 
 export function develop(game, p) {
   if (!canDevelop(game, p)) return false;
-  game.clans[p.clan].rice -= game.data.rules.develop.cost;
+  game.clans[p.clan].rice -= developCost(game, p);
   p.koku += game.data.rules.develop.gain;
   p.acted = true;
   return true;
@@ -99,7 +130,9 @@ export function troopCap(game, p) {
 
 export function recruitPlan(game, p) {
   const { recruit } = game.data.rules;
-  const amount = Math.max(0, Math.min(p.koku * recruit.perKoku, troopCap(game, p) - p.troops));
+  // 政務の高い武将がいる国ほど人が集まる（政務50で表どおり）
+  const gather = Math.floor((p.koku * recruit.perKoku * (0.75 + bestStat(game, p, 'admin') / 200)) / 10) * 10;
+  const amount = Math.max(0, Math.min(gather, troopCap(game, p) - p.troops));
   return { amount, cost: Math.ceil((amount / 100) * recruit.costPer100) };
 }
 
@@ -135,7 +168,7 @@ export function canMarch(game, from, to, ratio) {
 // 守りの倍率。農繁期は兵が田畑に出ていて手薄になる（攻める側は収穫を削ってでもそこを突ける）
 export function defenseFactor(game, p) {
   const { castleBonus, busyDefense } = game.data.rules;
-  return (1 + castleBonus * p.castle) * (isBusySeason(game) ? busyDefense : 1);
+  return (1 + castleBonus * p.castle) * (isBusySeason(game) ? busyDefense : 1) * leadFactor(bestStat(game, p, 'lead'));
 }
 
 // 勝算の目安にも使う
@@ -143,17 +176,23 @@ export function defensePower(game, p) {
   return p.troops * defenseFactor(game, p);
 }
 
-export function march(game, from, to, ratio, rand = Math.random) {
+// 大将を省くと、その国でいちばん統率の高い武将が出る
+export function march(game, from, to, ratio, rand = Math.random, commanderId = null) {
   if (!canMarch(game, from, to, ratio)) return null;
   const size = marchSize(from, ratio);
   const attacker = from.clan;
   const defender = to.clan;
+  const commander = generalsIn(game, from).find((g) => g.id === commanderId) ?? generalsIn(game, from)[0];
+  const keeper = generalsIn(game, to)[0];
   from.troops -= size;
   game.clans[attacker].rice -= marchCost(game, size);
   useAction(game, from);
-  const result = fight(game, size, to, defenseFactor(game, to), rand);
+  const result = fight(game, size, to, defenseFactor(game, to), rand, attackFactor(game, from, commander));
+  result.lines.unshift(`大将 ${commander?.name ?? 'なし'}／守将 ${keeper?.name ?? 'なし'}`);
   if (result.won) {
+    result.lines.push(...displaceGenerals(game, to, attacker, rand));
     takeProvince(game, to, attacker, result);
+    if (commander) commander.loc = to.id;
   } else {
     from.troops += result.attackerLeft;
     to.troops = result.defenderLeft;
@@ -169,6 +208,24 @@ function takeProvince(game, to, attacker, result) {
   Object.assign(to, { clan: attacker, troops: result.attackerLeft, acted: true, busy: 0 });
 }
 
+// 城を落とされた国の武将は味方の国へ落ちのびる。逃げ場がなければ捕らえられ、当主は討たれ、家臣は降るか去る
+function displaceGenerals(game, to, attacker, rand) {
+  const refuge = neighbors(game, to).find((n) => n.clan === to.clan);
+  const lines = [];
+  for (const g of generalsIn(game, to)) {
+    if (refuge) {
+      g.loc = refuge.id;
+    } else if (!g.lord && rand() < game.data.rules.generals.joinChance) {
+      g.clan = attacker;
+      lines.push(`${g.name}が降り、家臣に加わった。`);
+    } else {
+      g.alive = false;
+      lines.push(g.lord ? `${g.name}は討たれた。` : `${g.name}は行方知れずになった。`);
+    }
+  }
+  return lines;
+}
+
 function updateAlive(game, clanId) {
   if (provincesOf(game, clanId).length === 0) game.clans[clanId].alive = false;
 }
@@ -177,9 +234,12 @@ export function canMove(game, from, to) {
   return !from.acted && to.clan === from.clan && from.adj.includes(to.id) && marchSize(from, 0.8) >= 100;
 }
 
-export function move(game, from, to, ratio) {
+// generalId を渡すと、その武将も兵といっしょに移る
+export function move(game, from, to, ratio, generalId = null) {
   if (!canMove(game, from, to)) return false;
   const size = marchSize(from, ratio);
+  const general = generalsIn(game, from).find((g) => g.id === generalId);
+  if (general) general.loc = to.id;
   from.troops -= size;
   to.troops += size;
   from.acted = true;

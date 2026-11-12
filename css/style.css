@@ -141,6 +141,20 @@ main { max-width: 520px; margin: 0 auto; padding: 8px 16px 0; }
 .cmd .sub { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
 .cmd:disabled { opacity: 0.45; }
 
+/* iOS は 16px 未満の入力欄を押すと画面を勝手に拡大するので、文字は 16px にする */
+.pick-row { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: 14px; }
+.pick {
+  flex: 1;
+  min-height: 44px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+}
+
 .target { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
 .target .row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
 .target .cmd { text-align: center; }

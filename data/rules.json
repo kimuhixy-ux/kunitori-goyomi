@@ -17,5 +17,6 @@
   "castleBonus": 0.1,
   "busyDefense": 0.75,
   "battle": { "rounds": 6, "lossRate": 0.12, "breakRatio": 0.35 },
+  "generals": { "noneStat": 30, "joinChance": 0.5 },
   "victory": { "capital": "yamashiro", "provinces": 35 }
 }

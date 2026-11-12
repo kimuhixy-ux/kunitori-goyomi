@@ -3,12 +3,12 @@ import * as G from './game.js';
 import { endSeason } from './turn.js';
 import { renderMap } from './map.js';
 
-const DATA_FILES = { clans: 'data/clans.json', provinces: 'data/provinces.json', rules: 'data/rules.json', coast: 'data/coast.json' };
+const DATA_FILES = { clans: 'data/clans.json', provinces: 'data/provinces.json', rules: 'data/rules.json', coast: 'data/coast.json', generals: 'data/generals.json' };
 
 // 保存の形を変えたら番号を上げ、古い保存を読みこまないようにする
 const SAVE_KEY = 'kunitori-goyomi-save-v1';
 
-const state = { data: null, game: null, picking: false, zoomed: true, selectedId: null, log: [], report: null, confirmReset: false };
+const state = { data: null, game: null, picking: false, zoomed: true, selectedId: null, log: [], report: null, confirmReset: false, commanderId: null, escortId: null };
 
 const $status = document.getElementById('status');
 const $map = document.getElementById('map');
@@ -132,6 +132,7 @@ function selectProvince(id) {
     return;
   }
   state.selectedId = state.selectedId === id ? null : id;
+  Object.assign(state, { commanderId: null, escortId: null });
   state.report = null;
   state.confirmReset = false;
   render();
@@ -262,7 +263,32 @@ function renderProvince(p) {
   if (!mine) body = [el('p', { text: `守りの力 ${fmt(Math.round(G.defensePower(game, p)))}（兵×城×季節）` })];
   else if (p.acted) body = [el('p', { text: 'この国はこの季節、もう命令を終えた。' })];
   else body = commandList(p);
-  $panel.replaceChildren(el('h2', { text: p.name }), provinceFacts(p), ...body, backButton());
+  $panel.replaceChildren(el('h2', { text: p.name }), provinceFacts(p), generalList(p), ...body, backButton());
+}
+
+function generalLabel(g) {
+  return `${g.name}${g.lord ? '（当主）' : ''}　統率${g.lead}・政務${g.admin}`;
+}
+
+// 国の働きは武将の能力で変わるので、敵の国でも誰がいるかは見せる
+function generalList(p) {
+  const generals = G.generalsIn(state.game, p);
+  if (generals.length === 0) return el('p', { className: 'facts', text: '武将なし（統率・政務は並以下）' });
+  return el('div', {}, [
+    el('h3', { text: '武将' }),
+    el('ul', { className: 'lines' }, generals.map((g) => el('li', { text: generalLabel(g) }))),
+  ]);
+}
+
+// 大将や同行する武将を選ぶ欄。選び直すと勝算の表示も変わるので描き直す
+function generalSelect(p, key, emptyLabel) {
+  const generals = G.generalsIn(state.game, p);
+  const select = el('select', { className: 'pick', onchange: () => { state[key] = select.value || null; render(); } }, [
+    ...(emptyLabel ? [el('option', { value: '', text: emptyLabel })] : []),
+    ...generals.map((g) => el('option', { value: g.id, text: generalLabel(g) })),
+  ]);
+  select.value = state[key] ?? (emptyLabel ? '' : generals[0]?.id ?? '');
+  return select;
 }
 
 function cmdButton(label, sub, enabled, onclick) {
@@ -285,17 +311,20 @@ function commandList(p) {
   const plan = G.recruitPlan(game, p);
   const busy = G.isBusySeason(game) ? '（農繁期：秋の収穫が減る）' : '';
   const list = [
-    cmdButton('開墾', `兵糧 ${develop.cost} → 石高 +${develop.gain}万石（上限 ${Math.floor(p.baseKoku * develop.maxRate)}）`,
+    cmdButton('開墾', `兵糧 ${G.developCost(game, p)} → 石高 +${develop.gain}万石（上限 ${Math.floor(p.baseKoku * develop.maxRate)}）`,
       G.canDevelop(game, p), act(() => G.develop(game, p))),
     cmdButton('徴兵', `兵 +${fmt(plan.amount)}　兵糧 ${plan.cost}　上限 ${fmt(G.troopCap(game, p))}${busy}`,
       G.canRecruit(game, p), act(() => G.recruit(game, p))),
   ];
   const enemies = G.neighbors(game, p).filter((n) => n.clan !== game.player);
   const friends = G.neighbors(game, p).filter((n) => n.clan === game.player);
+  const hasGenerals = G.generalsIn(game, p).length > 0;
+  const commander = hasGenerals ? [el('label', { className: 'pick-row' }, ['大将', generalSelect(p, 'commanderId', null)])] : [];
+  const escort = hasGenerals ? [el('label', { className: 'pick-row' }, ['同行', generalSelect(p, 'escortId', 'だれも行かない')])] : [];
   return [
     el('h3', { text: '内政' }), el('div', { className: 'commands' }, list),
-    ...(enemies.length ? [el('h3', { text: `出陣${busy}` }), el('div', { className: 'commands' }, enemies.map((n) => marchTarget(p, n)))] : []),
-    ...(friends.length ? [el('h3', { text: '移動（兵の8割を送る）' }), el('div', { className: 'commands' }, friends.map((n) => moveButton(p, n)))] : []),
+    ...(enemies.length ? [el('h3', { text: `出陣${busy}` }), ...commander, el('div', { className: 'commands' }, enemies.map((n) => marchTarget(p, n)))] : []),
+    ...(friends.length ? [el('h3', { text: '移動（兵の8割を送る）' }), ...escort, el('div', { className: 'commands' }, friends.map((n) => moveButton(p, n)))] : []),
   ];
 }
 
@@ -310,9 +339,11 @@ function odds(size, power) {
 function marchTarget(p, n) {
   const { game } = state;
   const power = Math.round(G.defensePower(game, n));
+  const commander = G.generalsIn(game, p).find((g) => g.id === state.commanderId);
+  const factor = G.attackFactor(game, p, commander);
   const buttons = [0.5, 0.8].map((ratio) => {
     const size = G.marchSize(p, ratio);
-    const [label, cls] = odds(size, power);
+    const [label, cls] = odds(size * factor, power);
     return el('button', {
       className: 'cmd', type: 'button', disabled: !G.canMarch(game, p, n, ratio),
       onclick: () => doMarch(p, n, ratio),
@@ -326,7 +357,7 @@ function marchTarget(p, n) {
 }
 
 function doMarch(p, n, ratio) {
-  const result = G.march(state.game, p, n, ratio);
+  const result = G.march(state.game, p, n, ratio, Math.random, state.commanderId);
   if (!result) return;
   state.report = result;
   render();
@@ -335,7 +366,7 @@ function doMarch(p, n, ratio) {
 function moveButton(p, n) {
   const size = G.marchSize(p, 0.8);
   return cmdButton(`${n.name}へ`, `兵 ${fmt(size)} を送る`, G.canMove(state.game, p, n),
-    act(() => G.move(state.game, p, n, 0.8)));
+    act(() => G.move(state.game, p, n, 0.8, state.escortId)));
 }
 
 function nextSeason() {

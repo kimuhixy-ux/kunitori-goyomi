@@ -39,7 +39,7 @@ function tryAttack(game, p, rand) {
   const weakest = targets.reduce((a, b) => (G.defensePower(game, a) <= G.defensePower(game, b) ? a : b));
   for (const ratio of [0.8, 0.6]) {
     const size = G.marchSize(p, ratio);
-    if (size < G.defensePower(game, weakest) * aggressionOf(game, p.clan) || !safeToLeave(game, p, weakest, size)) continue;
+    if (size * G.attackFactor(game, p) < G.defensePower(game, weakest) * aggressionOf(game, p.clan) || !safeToLeave(game, p, weakest, size)) continue;
     return G.march(game, p, weakest, ratio, rand);
   }
   return null;
@@ -51,7 +51,9 @@ function tryReinforce(game, p) {
   const front = G.neighbors(game, p)
     .filter((n) => G.canMove(game, p, n))
     .sort((a, b) => enemyNeighbors(game, b).length - enemyNeighbors(game, a).length)[0];
-  return front ? G.move(game, p, front, 0.8) : false;
+  // 内地に武将が2人以上いれば、統率のいちばん高い者を前線へ出す
+  const generals = G.generalsIn(game, p);
+  return front ? G.move(game, p, front, 0.8, generals.length >= 2 ? generals[0].id : null) : false;
 }
 
 function tryRecruit(game, p) {
