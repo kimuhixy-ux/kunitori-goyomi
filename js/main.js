@@ -8,7 +8,7 @@ const DATA_FILES = { clans: 'data/clans.json', provinces: 'data/provinces.json',
 // 保存の形を変えたら番号を上げ、古い保存を読みこまないようにする
 const SAVE_KEY = 'kunitori-goyomi-save-v1';
 
-const state = { data: null, game: null, picking: false, zoom: 1, selectedId: null, log: [], report: null, confirmReset: false, commanderId: null, escortId: null };
+const state = { data: null, game: null, picking: false, zoom: 1, selectedId: null, log: [], report: null, confirmReset: false, commanderId: null, escortId: null, helpOpen: false };
 
 const $status = document.getElementById('status');
 const $map = document.getElementById('map');
@@ -228,12 +228,43 @@ function renderHome() {
   $panel.replaceChildren(
     el('h2', { text: `${game.year}年 ${G.seasonName(game)}` }),
     el('p', { text: `目標：京（山城）を含めて${victory.provinces}か国を治める。自分の国（金の縁）を押して命令する。` }),
+    helpBox(),
     ...(season ? [el('p', { text: season })] : []),
     ...(G.underSiege(game, game.player) ? [el('p', { text: `包囲網：${game.data.rules.siege.provinces}か国に達した家として、隣の大名が手を組んで狙ってくる。和睦にも応じない。` })] : []),
     ...(state.log.length ? [el('h3', { text: '前の季節の出来事' }), logList(state.log)] : []),
     el('h3', { text: '諸大名' }),
     clanList(),
   );
+}
+
+// 遊び方。[見出し, 本文] の組で並べる
+const HELP = [
+  ['目標', '京（山城）を含めて35か国を治めれば勝ち。自分の国がなくなれば負け。'],
+  ['進め方', '自分の国（金の縁）を押して命令する。1つの国は1季節に1つだけ命令できる。命令を終えたら下の「季節を進める」を押す。'],
+  ['季節', '春・秋は農繁期。徴兵・出陣・築城をした国は秋の収穫が減るが、敵の守りも手薄になる。冬は雪国（❄）が出陣できず、攻め込まれもしない。秋に石高に応じた兵糧が入る。'],
+  ['兵糧', '兵を養うのに毎季節使う。尽きると各国の兵が逃げ出す。'],
+  ['開墾', '兵糧を使って石高（米のとれ高）を増やす。石高が多いほど収穫も兵の上限も増える。'],
+  ['徴兵', '兵糧を使って兵を集める。'],
+  ['築城', '兵糧を使って城を1段堅くする（★5まで）。城が堅いほど守りが強い。'],
+  ['出陣', '隣の敵国へ兵の半数か8割で攻め込む。「有利・五分・不利」が勝算の目安。大将に統率の高い武将を選ぶと強い。勝てば国と大将がそちらへ移る。'],
+  ['移動', '兵の8割を隣の自分の国へ送る。「同行」で武将も連れて行ける。'],
+  ['調略', '隣の敵国の家臣に寝返りを持ちかける。自分の国の武将の政務が高いほど成功しやすい。'],
+  ['和睦', '隣の大名と1年間たがいに攻めない約束をする。相手より兵が多いほど応じやすい。断られても兵糧は減る。'],
+  ['武将', '統率は合戦と守り、政務は開墾の費用・徴兵の人数・調略に効く。国にいる武将のうち一番得意な者の値が使われる。'],
+  ['民心', '奪ったばかりの国は1年間、収穫が半分になり徴兵もできない。'],
+  ['包囲網', '10か国に達すると、隣の大名がこちらを優先して狙い、和睦にも応じなくなる。'],
+  ['地図', '「＋ 拡大」「－ 縮小」で大きさを変える。iPhoneでは2本指で広げてもよい。PCではマウスで押したまま動かすと地図がずれる。'],
+  ['保存', '自動で保存される。「最初から」を2回押すとやり直せる。'],
+];
+
+// 開いたままにしておけるよう、開閉を覚えておく（画面は命令のたびに描き直すため）
+function helpBox() {
+  const box = el('details', { className: 'help', open: state.helpOpen }, [
+    el('summary', { text: '遊び方' }),
+    el('dl', {}, HELP.flatMap(([k, v]) => [el('dt', { text: k }), el('dd', { text: v })])),
+  ]);
+  box.addEventListener('toggle', () => { state.helpOpen = box.open; });
+  return box;
 }
 
 // 押し間違いで保存を消さないよう、2回押して初めてやり直す
@@ -258,6 +289,7 @@ function renderPicker() {
   $panel.replaceChildren(
     el('h2', { text: '大名を選ぶ' }),
     el('p', { text: `どの家で天下をめざすか選ぶ。京（山城）を含めて${game.data.rules.victory.provinces}か国を治めれば勝ち。石高の多い順に並べてある。` }),
+    helpBox(),
     el('div', { className: 'commands' }, clans.map(({ c, ps }) => clanButton(c, ps))),
   );
 }
