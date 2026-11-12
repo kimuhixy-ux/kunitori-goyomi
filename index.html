@@ -23,7 +23,10 @@
     <dl id="status"></dl>
   </header>
   <main>
-    <svg id="map" class="map" viewBox="-4 0 104 124" role="img" aria-label="国の地図"></svg>
+    <div class="map-tools"><button id="zoom" class="tool" type="button">全国を見る</button></div>
+    <div id="map-wrap" class="map-wrap zoomed">
+      <svg id="map" class="map" viewBox="4 22 248 246" role="img" aria-label="国の地図"></svg>
+    </div>
     <section id="panel" class="panel"></section>
   </main>
   <footer class="actions">

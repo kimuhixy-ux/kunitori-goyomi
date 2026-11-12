@@ -8,13 +8,15 @@ const DATA_FILES = { clans: 'data/clans.json', provinces: 'data/provinces.json',
 // 保存の形を変えたら番号を上げ、古い保存を読みこまないようにする
 const SAVE_KEY = 'kunitori-goyomi-save-v1';
 
-const state = { data: null, game: null, picking: false, selectedId: null, log: [], report: null, confirmReset: false };
+const state = { data: null, game: null, picking: false, zoomed: true, selectedId: null, log: [], report: null, confirmReset: false };
 
 const $status = document.getElementById('status');
 const $map = document.getElementById('map');
 const $panel = document.getElementById('panel');
 const $next = document.getElementById('next');
 const $reset = document.getElementById('reset');
+const $mapWrap = document.getElementById('map-wrap');
+const $zoom = document.getElementById('zoom');
 
 // 外部データを innerHTML に流さないよう、要素はすべてこの関数で作る
 function el(tag, props = {}, children = []) {
@@ -94,7 +96,41 @@ function render() {
   $reset.classList.toggle('confirm', state.confirmReset);
 }
 
+// 地図の中心を国に合わせる。描き直しでは位置を保ち、始めたときと拡大したときだけ動かす
+function centerOn(id) {
+  const p = G.province(state.game, id);
+  const vb = $map.viewBox.baseVal;
+  const scale = $map.clientWidth / vb.width;
+  $mapWrap.scrollTo({ left: (p.x - vb.x) * scale - $mapWrap.clientWidth / 2, top: (p.y - vb.y) * scale - $mapWrap.clientHeight / 2 });
+}
+
+function setZoom(on) {
+  state.zoomed = on;
+  $mapWrap.classList.toggle('zoomed', on);
+  $zoom.textContent = on ? '全国を見る' : '拡大する';
+}
+
+function homeProvince() {
+  const mine = G.provincesOf(state.game, state.game.player);
+  return mine.reduce((a, b) => (a.troops >= b.troops ? a : b), mine[0]);
+}
+
+function toggleZoom() {
+  setZoom(!state.zoomed);
+  const focus = state.selectedId ?? homeProvince()?.id;
+  if (state.zoomed && focus) centerOn(focus);
+}
+
+// 全国表示で国を押したら、その国を拡大して見せる
 function selectProvince(id) {
+  if (id && !state.zoomed && !state.picking) {
+    setZoom(true);
+    state.selectedId = id;
+    state.report = null;
+    render();
+    centerOn(id);
+    return;
+  }
   state.selectedId = state.selectedId === id ? null : id;
   state.report = null;
   state.confirmReset = false;
@@ -181,6 +217,8 @@ function clanButton(c, ps) {
 function pickClan(id) {
   Object.assign(state, { game: G.createGame(state.data, id), picking: false, selectedId: null, report: null, log: [] });
   render();
+  setZoom(true);
+  centerOn(homeProvince().id);
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -318,11 +356,15 @@ async function start(fresh = false) {
   const saved = fresh ? null : readSave();
   if (saved?.game) G.restore(game, saved.game);
   Object.assign(state, { game, picking: !saved?.game, selectedId: null, report: null, log: saved?.log ?? [], confirmReset: false });
+  // 大名選びは全国を見渡して選び、続きから遊ぶときは自分の国を拡大して見せる
+  setZoom(!state.picking);
   render();
+  if (!state.picking && homeProvince()) centerOn(homeProvince().id);
 }
 
 $next.addEventListener('click', nextSeason);
 $reset.addEventListener('click', onReset);
+$zoom.addEventListener('click', toggleZoom);
 start();
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
