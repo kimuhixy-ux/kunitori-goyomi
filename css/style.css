@@ -88,6 +88,9 @@ main { max-width: 520px; margin: 0 auto; padding: 8px 16px 0; }
 .map { display: block; width: 100%; height: auto; }
 .map-tools { display: flex; justify-content: flex-end; gap: 6px; margin-bottom: 6px; }
 .tool:disabled { opacity: 0.45; }
+/* つかんで動かせることが手の形で分かるようにする。ドラッグ中に文字が選択されないようにもする */
+.map-wrap { cursor: grab; user-select: none; -webkit-user-select: none; }
+.map-wrap.dragging, .map-wrap.dragging .node { cursor: grabbing; }
 .map .land { fill: var(--land); stroke: var(--coast); stroke-width: 0.4; stroke-linejoin: round; }
 .map .lake { fill: var(--sea); stroke: var(--coast); stroke-width: 0.3; }
 .map .edge { stroke: var(--edge); stroke-width: 0.5; }

@@ -146,6 +146,40 @@ function watchPinch() {
   $mapWrap.addEventListener('gestureend', (e) => e.preventDefault());
 }
 
+// 指なら Safari がそのままずらしてくれるので、マウスのときだけ押したまま動かして地図をずらす
+const DRAG_SLOP = 5;
+function watchDrag() {
+  let drag = null;
+  $mapWrap.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'mouse' || e.button !== 0) return;
+    delete $mapWrap.dataset.dragged;
+    // 押した国に青い枠が残るのを防ぐ。国を選ぶ処理は click で動くので影響しない
+    e.preventDefault();
+    drag = { x: e.clientX, y: e.clientY, left: $mapWrap.scrollLeft, top: $mapWrap.scrollTop, moved: false };
+  });
+  window.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x;
+    const dy = e.clientY - drag.y;
+    if (!drag.moved && Math.hypot(dx, dy) < DRAG_SLOP) return;
+    drag.moved = true;
+    $mapWrap.classList.add('dragging');
+    $mapWrap.scrollTo({ left: drag.left - dx, top: drag.top - dy });
+  });
+  window.addEventListener('pointerup', () => {
+    if (drag?.moved) $mapWrap.dataset.dragged = '1';
+    drag = null;
+    $mapWrap.classList.remove('dragging');
+  });
+  // ずらし終えた直後のクリックで国が選ばれてしまわないよう、その1回だけ止める
+  $mapWrap.addEventListener('click', (e) => {
+    if (!$mapWrap.dataset.dragged) return;
+    delete $mapWrap.dataset.dragged;
+    e.stopPropagation();
+    e.preventDefault();
+  }, true);
+}
+
 // 全国表示で国を押したら、その国を拡大して見せる
 function selectProvince(id) {
   if (id && state.zoom === ZOOM_STEPS[0] && !state.picking) {
@@ -423,6 +457,7 @@ $reset.addEventListener('click', onReset);
 $zoomIn.addEventListener('click', () => zoomStep(1));
 $zoomOut.addEventListener('click', () => zoomStep(-1));
 watchPinch();
+watchDrag();
 start();
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
