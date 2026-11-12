@@ -1,5 +1,5 @@
 // データやコードを更新したら必ず番号を上げる（上げ忘れると端末に古い版が残る）
-const CACHE = 'kunitori-goyomi-v3';
+const CACHE = 'kunitori-goyomi-v4';
 const ASSETS = [
   './',
   'index.html',

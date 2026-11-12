@@ -14,6 +14,29 @@ export function createGame(data) {
   return { data, provinces, clans, player, year: data.rules.startYear, season: 0, result: null };
 }
 
+// 保存するのは遊んでいるうちに変わる値だけ。地図や大名の設定は毎回 data/*.json から読み直す
+export function snapshot(game) {
+  return {
+    year: game.year,
+    season: game.season,
+    result: game.result,
+    clans: game.clans,
+    provinces: game.provinces.map(({ id, clan, koku, troops, acted, busy }) => ({ id, clan, koku, troops, acted, busy })),
+  };
+}
+
+export function restore(game, snap) {
+  Object.assign(game, { year: snap.year, season: snap.season, result: snap.result });
+  for (const [id, c] of Object.entries(snap.clans)) {
+    if (game.clans[id]) Object.assign(game.clans[id], c);
+  }
+  for (const s of snap.provinces) {
+    const p = province(game, s.id);
+    if (p) Object.assign(p, s);
+  }
+  return game;
+}
+
 export function province(game, id) {
   return game.provinces.find((p) => p.id === id);
 }

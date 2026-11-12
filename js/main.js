@@ -5,7 +5,10 @@ import { renderMap } from './map.js';
 
 const DATA_FILES = { clans: 'data/clans.json', provinces: 'data/provinces.json', rules: 'data/rules.json', coast: 'data/coast.json' };
 
-const state = { game: null, selectedId: null, log: [], report: null };
+// 保存の形を変えたら番号を上げ、古い保存を読みこまないようにする
+const SAVE_KEY = 'kunitori-goyomi-save-v1';
+
+const state = { game: null, selectedId: null, log: [], report: null, confirmReset: false };
 
 const $status = document.getElementById('status');
 const $map = document.getElementById('map');
@@ -46,7 +49,34 @@ function renderStatus() {
   $status.replaceChildren(...items.map(([k, v]) => el('div', {}, [el('dt', { text: k }), el('dd', { text: v })])));
 }
 
+// プライベートブラウズなどで保存できなくても、遊ぶこと自体は続けられるようにする
+function writeSave() {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ game: G.snapshot(state.game), log: state.log }));
+  } catch {
+    // 保存できない環境では何もしない
+  }
+}
+
+function readSave() {
+  try {
+    return JSON.parse(localStorage.getItem(SAVE_KEY));
+  } catch {
+    return null;
+  }
+}
+
+function clearSave() {
+  try {
+    localStorage.removeItem(SAVE_KEY);
+  } catch {
+    // 消せなくても、次の保存で上書きされる
+  }
+}
+
+// 命令も季節送りも最後は必ずここを通るので、ここで自動保存する
 function render() {
+  writeSave();
   renderStatus();
   renderMap($map, state.game, state.selectedId, selectProvince);
   if (state.game.result) renderResult();
@@ -59,6 +89,7 @@ function render() {
 function selectProvince(id) {
   state.selectedId = state.selectedId === id ? null : id;
   state.report = null;
+  state.confirmReset = false;
   render();
 }
 
@@ -97,7 +128,24 @@ function renderHome() {
     ...(state.log.length ? [el('h3', { text: '前の季節の出来事' }), logList(state.log)] : []),
     el('h3', { text: '諸大名' }),
     clanList(),
+    resetButton(),
   );
+}
+
+// 押し間違いで保存を消さないよう、2回押して初めてやり直す
+function resetButton() {
+  const label = state.confirmReset ? '本当に最初からやり直す（もう一度押す）' : '最初からやり直す';
+  return el('button', {
+    className: 'back', type: 'button', text: label,
+    onclick: () => {
+      if (state.confirmReset) {
+        start(true);
+      } else {
+        state.confirmReset = true;
+        render();
+      }
+    },
+  });
 }
 
 function renderReport() {
@@ -116,7 +164,7 @@ function renderResult() {
   $panel.replaceChildren(
     el('p', { className: 'big', text: win ? '天下布武' : '落城' }),
     el('p', { text: win ? `${game.year}年、京を押さえ天下に号令した。` : `${game.year}年、織田家は滅んだ。` }),
-    el('button', { className: 'next', type: 'button', text: 'はじめから', onclick: start }),
+    el('button', { className: 'next', type: 'button', text: 'はじめから', onclick: () => start(true) }),
   );
 }
 
@@ -221,15 +269,18 @@ function nextSeason() {
   state.log = endSeason(state.game);
   state.selectedId = null;
   state.report = null;
+  state.confirmReset = false;
   render();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-async function start() {
-  state.game = G.createGame(await loadData());
-  state.selectedId = null;
-  state.report = null;
-  state.log = [];
+// 保存があれば続きから。fresh のときは保存を消して最初から始める
+async function start(fresh = false) {
+  const game = G.createGame(await loadData());
+  if (fresh) clearSave();
+  const saved = fresh ? null : readSave();
+  if (saved?.game) G.restore(game, saved.game);
+  Object.assign(state, { game, selectedId: null, report: null, log: saved?.log ?? [], confirmReset: false });
   render();
 }
 
