@@ -49,7 +49,8 @@ function harvest(game) {
   let got = 0;
   for (const p of game.provinces) {
     const amount = p.koku * harvestPerKoku;
-    const rate = Math.max(minHarvestRate, 1 - busyPenalty * p.busy);
+    const unrest = p.unrest ? game.data.rules.unrest.harvestRate : 1;
+    const rate = Math.max(minHarvestRate, 1 - busyPenalty * p.busy) * unrest;
     game.clans[p.clan].rice += Math.round(amount * rate);
     if (p.clan === game.player) {
       full += amount;
@@ -58,7 +59,7 @@ function harvest(game) {
     p.busy = 0;
   }
   const loss = full - got;
-  const note = loss > 0 ? `（農繁期の動員で -${fmt(loss)}）` : '';
+  const note = loss > 0 ? `（農繁期の動員と民心の乱れで -${fmt(loss)}）` : '';
   return [{ text: `秋の収穫：兵糧 +${fmt(got)}${note}`, mine: true }];
 }
 
@@ -74,7 +75,10 @@ export function endSeason(game, rand = Math.random) {
   // 秋は取れた米で兵を養うので、収穫を先にする
   if (game.season === game.data.rules.harvestSeason) lines.push(...harvest(game));
   lines.push(...payUpkeep(game));
-  for (const p of game.provinces) p.acted = false;
+  for (const p of game.provinces) {
+    p.acted = false;
+    if (p.unrest) p.unrest -= 1;
+  }
   game.season = (game.season + 1) % 4;
   if (game.season === 0) game.year += 1;
   judge(game);

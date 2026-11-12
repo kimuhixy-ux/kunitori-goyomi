@@ -12,7 +12,7 @@ export function createGame(data, playerId = data.clans.find((c) => c.player).id)
   for (const c of data.clans) clans[c.id] = { rice: 0, alive: true };
   for (const p of provinces) clans[p.clan].rice += Math.round(p.koku * data.rules.startRicePerKoku);
   const generals = data.generals.map((g) => ({ ...g, alive: true }));
-  return { data, provinces, clans, generals, player: playerId, year: data.rules.startYear, season: 0, result: null };
+  return { data, provinces, clans, generals, truces: {}, player: playerId, year: data.rules.startYear, season: 0, result: null };
 }
 
 // 保存するのは遊んでいるうちに変わる値だけ。地図や大名の設定は毎回 data/*.json から読み直す
@@ -23,13 +23,14 @@ export function snapshot(game) {
     season: game.season,
     result: game.result,
     clans: game.clans,
-    provinces: game.provinces.map(({ id, clan, koku, troops, acted, busy }) => ({ id, clan, koku, troops, acted, busy })),
+    truces: game.truces,
+    provinces: game.provinces.map(({ id, clan, koku, troops, castle, unrest, acted, busy }) => ({ id, clan, koku, troops, castle, unrest, acted, busy })),
     generals: game.generals.map(({ id, clan, loc, alive }) => ({ id, clan, loc, alive })),
   };
 }
 
 export function restore(game, snap) {
-  Object.assign(game, { player: snap.player ?? game.player, year: snap.year, season: snap.season, result: snap.result });
+  Object.assign(game, { player: snap.player ?? game.player, year: snap.year, season: snap.season, result: snap.result, truces: snap.truces ?? {} });
   for (const [id, c] of Object.entries(snap.clans)) {
     if (game.clans[id]) Object.assign(game.clans[id], c);
   }
@@ -138,7 +139,7 @@ export function recruitPlan(game, p) {
 
 export function canRecruit(game, p) {
   const plan = recruitPlan(game, p);
-  return !p.acted && plan.amount >= 100 && game.clans[p.clan].rice >= plan.cost;
+  return !p.acted && !p.unrest && plan.amount >= 100 && game.clans[p.clan].rice >= plan.cost;
 }
 
 export function recruit(game, p) {
@@ -161,7 +162,7 @@ export function marchCost(game, size) {
 export function canMarch(game, from, to, ratio) {
   const size = marchSize(from, ratio);
   if (from.acted || to.clan === from.clan || !from.adj.includes(to.id)) return false;
-  if (snowedIn(game, from) || snowedIn(game, to)) return false;
+  if (snowedIn(game, from) || snowedIn(game, to) || truceLeft(game, from.clan, to.clan) > 0) return false;
   return size >= game.data.rules.minMarch && game.clans[from.clan].rice >= marchCost(game, size);
 }
 
@@ -205,7 +206,8 @@ export function march(game, from, to, ratio, rand = Math.random, commanderId = n
 function takeProvince(game, to, attacker, result) {
   const refuge = neighbors(game, to).find((n) => n.clan === to.clan);
   if (refuge) refuge.troops += result.defenderLeft;
-  Object.assign(to, { clan: attacker, troops: result.attackerLeft, acted: true, busy: 0 });
+  // 奪ったばかりの国は民が従わず、しばらく収穫が減り兵も集まらない
+  Object.assign(to, { clan: attacker, troops: result.attackerLeft, acted: true, busy: 0, unrest: game.data.rules.unrest.seasons });
 }
 
 // 城を落とされた国の武将は味方の国へ落ちのびる。逃げ場がなければ捕らえられ、当主は討たれ、家臣は降るか去る
@@ -243,5 +245,96 @@ export function move(game, from, to, ratio, generalId = null) {
   from.troops -= size;
   to.troops += size;
   from.acted = true;
+  return true;
+}
+
+// 季節を通し番号にする。和睦の期限を年をまたいで数えるため
+export function turnIndex(game) {
+  return (game.year - game.data.rules.startYear) * 4 + game.season;
+}
+
+function truceKey(a, b) {
+  return [a, b].sort().join('|');
+}
+
+// 和睦の残り季節数。0 なら和睦していない
+export function truceLeft(game, a, b) {
+  return Math.max(0, (game.truces[truceKey(a, b)] ?? 0) - turnIndex(game));
+}
+
+export function fortifyCost(game, p) {
+  return game.data.rules.fortify.cost * (p.castle + 1);
+}
+
+export function canFortify(game, p) {
+  return !p.acted && p.castle < game.data.rules.fortify.max && game.clans[p.clan].rice >= fortifyCost(game, p);
+}
+
+// 普請には人手がいるので、農繁期なら動員として数える
+export function fortify(game, p) {
+  if (!canFortify(game, p)) return false;
+  game.clans[p.clan].rice -= fortifyCost(game, p);
+  p.castle += 1;
+  useAction(game, p);
+  return true;
+}
+
+// 寝返らせる相手は、相手の国でいちばん政務の低い家臣（主家への忠義を説かれにくい者）。当主は寝返らない
+export function plotTarget(game, to) {
+  return generalsIn(game, to).filter((g) => !g.lord).sort((a, b) => a.admin - b.admin)[0] ?? null;
+}
+
+// 仕掛ける側の政務が相手の家臣の政務を上回るほど成功しやすい
+export function plotChance(game, from, to) {
+  const target = plotTarget(game, to);
+  if (!target) return 0;
+  const { base, max } = game.data.rules.plot;
+  return Math.min(max, Math.max(0.05, base + (bestStat(game, from, 'admin') - target.admin) / 150));
+}
+
+export function canPlot(game, from, to) {
+  return !from.acted && to.clan !== from.clan && from.adj.includes(to.id)
+    && plotTarget(game, to) !== null && game.clans[from.clan].rice >= game.data.rules.plot.cost;
+}
+
+export function plot(game, from, to, rand = Math.random) {
+  if (!canPlot(game, from, to)) return null;
+  const target = plotTarget(game, to);
+  const chance = plotChance(game, from, to);
+  game.clans[from.clan].rice -= game.data.rules.plot.cost;
+  from.acted = true;
+  if (rand() >= chance) return { ok: false, name: target.name };
+  Object.assign(target, { clan: from.clan, loc: from.id });
+  return { ok: true, name: target.name };
+}
+
+// 天下を取りかけた家には、まわりの大名が手を組んで当たる
+export function underSiege(game, clanId) {
+  return clanId === game.player && provincesOf(game, clanId).length >= game.data.rules.siege.provinces;
+}
+
+export function truceCost(game, other) {
+  return game.data.rules.truce.costPerProvince * provincesOf(game, other).length;
+}
+
+// 相手より兵が多いほど和睦に応じやすい。包囲網のさなかは誰も応じない
+export function truceChance(game, clanId, other) {
+  if (underSiege(game, clanId)) return 0;
+  const ratio = troopsOf(game, clanId) / Math.max(1, troopsOf(game, other));
+  return Math.min(0.8, Math.max(0.1, 0.3 + (ratio - 1) * 0.3));
+}
+
+export function canTruce(game, from, other) {
+  return !from.acted && other !== from.clan && truceLeft(game, from.clan, other) === 0
+    && game.clans[from.clan].rice >= truceCost(game, other);
+}
+
+export function truce(game, from, other, rand = Math.random) {
+  if (!canTruce(game, from, other)) return null;
+  const chance = truceChance(game, from.clan, other);
+  game.clans[from.clan].rice -= truceCost(game, other);
+  from.acted = true;
+  if (rand() >= chance) return false;
+  game.truces[truceKey(from.clan, other)] = turnIndex(game) + game.data.rules.truce.seasons;
   return true;
 }

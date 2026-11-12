@@ -18,5 +18,10 @@
   "busyDefense": 0.75,
   "battle": { "rounds": 6, "lossRate": 0.12, "breakRatio": 0.35 },
   "generals": { "noneStat": 30, "joinChance": 0.5 },
+  "fortify": { "cost": 60, "max": 5 },
+  "plot": { "cost": 50, "base": 0.1, "max": 0.6 },
+  "truce": { "costPerProvince": 20, "seasons": 4 },
+  "unrest": { "seasons": 4, "harvestRate": 0.5 },
+  "siege": { "provinces": 10, "aggression": 0.8 },
   "victory": { "capital": "yamashiro", "provinces": 35 }
 }

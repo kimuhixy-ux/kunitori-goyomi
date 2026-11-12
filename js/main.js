@@ -229,6 +229,7 @@ function renderHome() {
     el('h2', { text: `${game.year}年 ${G.seasonName(game)}` }),
     el('p', { text: `目標：京（山城）を含めて${victory.provinces}か国を治める。自分の国（金の縁）を押して命令する。` }),
     ...(season ? [el('p', { text: season })] : []),
+    ...(G.underSiege(game, game.player) ? [el('p', { text: `包囲網：${game.data.rules.siege.provinces}か国に達した家として、隣の大名が手を組んで狙ってくる。和睦にも応じない。` })] : []),
     ...(state.log.length ? [el('h3', { text: '前の季節の出来事' }), logList(state.log)] : []),
     el('h3', { text: '諸大名' }),
     clanList(),
@@ -284,7 +285,7 @@ function pickClan(id) {
 
 function renderReport() {
   const r = state.report;
-  const head = r.won ? `${r.to}を奪った！` : `${r.to}を落とせなかった`;
+  const head = r.head ?? (r.won ? `${r.to}を奪った！` : `${r.to}を落とせなかった`);
   $panel.replaceChildren(
     el('h2', { text: head }),
     el('ul', { className: 'lines' }, r.lines.map((t) => el('li', { text: t }))),
@@ -312,6 +313,9 @@ function provinceFacts(p) {
   ];
   if (p.snow) facts.push('雪国');
   if (p.capital) facts.push('京');
+  if (p.unrest) facts.push(`民心が乱れている（あと${p.unrest}季節）`);
+  const truce = p.clan === game.player ? 0 : G.truceLeft(game, game.player, p.clan);
+  if (truce) facts.push(`和睦中（あと${truce}季節）`);
   return el('div', { className: 'facts' }, facts.map((f) => el('span', { text: f })));
 }
 
@@ -369,11 +373,14 @@ function commandList(p) {
   const { develop } = game.data.rules;
   const plan = G.recruitPlan(game, p);
   const busy = G.isBusySeason(game) ? '（農繁期：秋の収穫が減る）' : '';
+  const unrest = p.unrest ? '　民心が乱れて兵が集まらない' : '';
   const list = [
     cmdButton('開墾', `兵糧 ${G.developCost(game, p)} → 石高 +${develop.gain}万石（上限 ${Math.floor(p.baseKoku * develop.maxRate)}）`,
       G.canDevelop(game, p), act(() => G.develop(game, p))),
-    cmdButton('徴兵', `兵 +${fmt(plan.amount)}　兵糧 ${plan.cost}　上限 ${fmt(G.troopCap(game, p))}${busy}`,
+    cmdButton('徴兵', `兵 +${fmt(plan.amount)}　兵糧 ${plan.cost}　上限 ${fmt(G.troopCap(game, p))}${busy}${unrest}`,
       G.canRecruit(game, p), act(() => G.recruit(game, p))),
+    cmdButton('築城', p.castle >= game.data.rules.fortify.max ? '城はもう最も堅い' : `兵糧 ${G.fortifyCost(game, p)} → 城 ★${p.castle + 1}（守りが強くなる）${busy}`,
+      G.canFortify(game, p), act(() => G.fortify(game, p))),
   ];
   const enemies = G.neighbors(game, p).filter((n) => n.clan !== game.player);
   const friends = G.neighbors(game, p).filter((n) => n.clan === game.player);
@@ -383,8 +390,52 @@ function commandList(p) {
   return [
     el('h3', { text: '内政' }), el('div', { className: 'commands' }, list),
     ...(enemies.length ? [el('h3', { text: `出陣${busy}` }), ...commander, el('div', { className: 'commands' }, enemies.map((n) => marchTarget(p, n)))] : []),
+    ...diplomacyList(p, enemies),
     ...(friends.length ? [el('h3', { text: '移動（兵の8割を送る）' }), ...escort, el('div', { className: 'commands' }, friends.map((n) => moveButton(p, n)))] : []),
   ];
+}
+
+function pct(x) {
+  return `${Math.round(x * 100)}%`;
+}
+
+// 調略は隣の国ごと、和睦は隣の大名家ごとに並べる
+function diplomacyList(p, enemies) {
+  const { game } = state;
+  if (enemies.length === 0) return [];
+  const plots = enemies.filter((n) => G.plotTarget(game, n)).map((n) => {
+    const target = G.plotTarget(game, n);
+    return cmdButton(`調略：${n.name}の${target.name}`, `兵糧 ${game.data.rules.plot.cost}　成功の見込み ${pct(G.plotChance(game, p, n))}　成功すればこの国の家臣になる`,
+      G.canPlot(game, p, n), () => doPlot(p, n));
+  });
+  const clans = [...new Set(enemies.map((n) => n.clan))];
+  const truces = clans.map((c) => {
+    const left = G.truceLeft(game, game.player, c);
+    const sub = left ? `和睦中（あと${left}季節）`
+      : `兵糧 ${G.truceCost(game, c)}　応じる見込み ${pct(G.truceChance(game, game.player, c))}　1年間たがいに攻めない`;
+    return cmdButton(`和睦：${G.clanInfo(game, c).name}家`, sub, G.canTruce(game, p, c), () => doTruce(p, c));
+  });
+  const siege = G.underSiege(game, game.player) ? [el('p', { className: 'facts', text: '包囲網のさなか。どの家も和睦に応じない。' })] : [];
+  return [el('h3', { text: '外交' }), ...siege, el('div', { className: 'commands' }, [...plots, ...truces])];
+}
+
+function doPlot(p, n) {
+  const r = G.plot(state.game, p, n);
+  if (!r) return;
+  state.report = r.ok
+    ? { head: '調略が実った', lines: [`${n.name}の${r.name}が寝返り、${p.name}に入った。`] }
+    : { head: '調略は失敗した', lines: [`${r.name}は誘いに乗らなかった。兵糧だけが減った。`] };
+  render();
+}
+
+function doTruce(p, clanId) {
+  const r = G.truce(state.game, p, clanId);
+  if (r === null) return;
+  const name = `${G.clanInfo(state.game, clanId).name}家`;
+  state.report = r
+    ? { head: '和睦が成った', lines: [`${name}と和睦した。${state.game.data.rules.truce.seasons}季節のあいだ、たがいに攻め込まない。`] }
+    : { head: '和睦は断られた', lines: [`${name}は和睦に応じなかった。兵糧だけが減った。`] };
+  render();
 }
 
 // 勝算は「出す兵 ÷ 守りの力」でざっくり3段階に。合戦には運の幅があるので数字は見せすぎない
@@ -408,7 +459,8 @@ function marchTarget(p, n) {
       onclick: () => doMarch(p, n, ratio),
     }, [`${ratio === 0.5 ? '半数' : '8割'} ${fmt(size)}`, el('span', { className: `sub ${cls}`, text: `${label}・兵糧 ${G.marchCost(game, size)}` })]);
   });
-  const snow = G.snowedIn(game, n) || G.snowedIn(game, p) ? '　❄雪で動けない' : '';
+  const truce = G.truceLeft(game, p.clan, n.clan);
+  const snow = (G.snowedIn(game, n) || G.snowedIn(game, p) ? '　❄雪で動けない' : '') + (truce ? `　和睦中（あと${truce}季節）` : '');
   return el('div', { className: 'target' }, [
     el('div', { text: `${n.name}（${G.clanInfo(game, n.clan).name}家）守りの力 ${fmt(power)}${snow}` }),
     el('div', { className: 'row' }, buttons),

@@ -33,13 +33,26 @@ function aggressionOf(game, clanId) {
   return G.clanInfo(game, clanId).aggression ?? 1.15;
 }
 
+// 包囲網のさなかは、プレイヤーの国を少ない兵力差でも攻める
+function aggressionAgainst(game, clanId, target) {
+  const siege = G.underSiege(game, target.clan) ? game.data.rules.siege.aggression : 1;
+  return aggressionOf(game, clanId) * siege;
+}
+
+// 包囲網のさなかはプレイヤーの国を先に狙う。そうでなければいちばん守りの弱い国
+function pickTarget(game, targets) {
+  const sieged = targets.filter((n) => G.underSiege(game, n.clan));
+  const pool = sieged.length ? sieged : targets;
+  return pool.reduce((a, b) => (G.defensePower(game, a) <= G.defensePower(game, b) ? a : b));
+}
+
 function tryAttack(game, p, rand) {
   const targets = enemyNeighbors(game, p).filter((n) => G.canMarch(game, p, n, 0.5));
   if (targets.length === 0) return null;
-  const weakest = targets.reduce((a, b) => (G.defensePower(game, a) <= G.defensePower(game, b) ? a : b));
+  const weakest = pickTarget(game, targets);
   for (const ratio of [0.8, 0.6]) {
     const size = G.marchSize(p, ratio);
-    if (size * G.attackFactor(game, p) < G.defensePower(game, weakest) * aggressionOf(game, p.clan) || !safeToLeave(game, p, weakest, size)) continue;
+    if (size * G.attackFactor(game, p) < G.defensePower(game, weakest) * aggressionAgainst(game, p.clan, weakest) || !safeToLeave(game, p, weakest, size)) continue;
     return G.march(game, p, weakest, ratio, rand);
   }
   return null;
@@ -66,6 +79,14 @@ function tryRecruit(game, p) {
   return G.recruit(game, p);
 }
 
+// 敵と接する国は、兵糧に余裕があれば城を固める。★3までにとどめ、残りは開墾に回す
+const AI_CASTLE_MAX = 3;
+function tryFortify(game, p) {
+  if (enemyNeighbors(game, p).length === 0 || p.castle >= AI_CASTLE_MAX) return false;
+  if (game.clans[p.clan].rice - G.fortifyCost(game, p) < upkeep(game, p.clan) * 6) return false;
+  return G.fortify(game, p);
+}
+
 export function cpuTurn(game, clanId, rand) {
   const reports = [];
   for (const p of shuffle(G.provincesOf(game, clanId), rand)) {
@@ -75,7 +96,7 @@ export function cpuTurn(game, clanId, rand) {
       reports.push(report);
       continue;
     }
-    if (tryReinforce(game, p) || tryRecruit(game, p)) continue;
+    if (tryReinforce(game, p) || tryRecruit(game, p) || tryFortify(game, p)) continue;
     if (game.clans[clanId].rice > upkeep(game, clanId) * 4) G.develop(game, p);
   }
   return reports;
