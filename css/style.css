@@ -216,3 +216,8 @@ main { max-width: 520px; margin: 0 auto; padding: 8px 16px 0; }
 .advice { margin: 8px 0; padding: 2px 10px; border: 1px dashed var(--accent); border-radius: 10px; }
 .advice h3 { color: var(--accent); }
 .advice-list { padding: 0 12px 10px; }
+
+/* 難しさの★は名前の右に寄せ、むずかしい家ほど警告色にして一目で分かるようにする */
+.cmd .stars { float: right; font-size: 13px; letter-spacing: 1px; color: var(--good); }
+.cmd .stars-3 { color: var(--muted); }
+.cmd .stars-4, .cmd .stars-5 { color: var(--warn); }

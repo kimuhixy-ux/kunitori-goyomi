@@ -326,23 +326,39 @@ function renderPicker() {
   const clans = game.data.clans
     .map((c) => ({ c, ps: G.provincesOf(game, c.id) }))
     .sort((a, b) => sum(b.ps, 'koku') - sum(a.ps, 'koku'));
+  const stars = difficultyStars(game);
   $panel.replaceChildren(
     el('h2', { text: '大名を選ぶ' }),
     el('p', { text: `どの家で天下をめざすか選ぶ。京（山城）を含めて${game.data.rules.victory.provinces}か国を治めれば勝ち。石高の多い順に並べてある。` }),
     helpBox(),
-    el('div', { className: 'commands' }, clans.map(({ c, ps }) => clanButton(c, ps))),
+    el('p', { className: 'facts', text: '★は難しさの目安（★1 やさしい〜★5 むずかしい）。' }),
+    el('div', { className: 'commands' }, clans.map(({ c, ps }) => clanButton(c, ps, stars[c.id]))),
   );
+}
+
+// 難しさの目安。軍師の進言どおりに自動で遊ばせた結果といちばんよく合ったのが
+// 「石高が多いほど楽、隣り合う敵の家の兵が多いほど苦しい」という見方だったので、それで並べて5段に分ける
+function difficultyStars(game) {
+  const score = (c) => {
+    const ps = G.provincesOf(game, c.id);
+    const rivals = new Set(ps.flatMap((p) => G.neighbors(game, p)).map((n) => n.clan).filter((id) => id !== c.id));
+    const rivalTroops = [...rivals].reduce((total, id) => total + G.troopsOf(game, id), 0);
+    return Math.log(sum(ps, 'koku')) - 0.5 * Math.log(Math.max(1, rivalTroops));
+  };
+  const ranked = game.data.clans.map((c) => ({ id: c.id, s: score(c) })).sort((a, b) => b.s - a.s);
+  return Object.fromEntries(ranked.map(({ id }, i) => [id, 1 + Math.floor((i * 5) / ranked.length)]));
 }
 
 function sum(list, key) {
   return list.reduce((total, p) => total + p[key], 0);
 }
 
-function clanButton(c, ps) {
+function clanButton(c, ps, star) {
   const names = ps.map((p) => p.name + (p.capital ? '（京）' : '')).join('・');
   return el('button', { className: 'cmd', type: 'button', onclick: () => pickClan(c.id) }, [
     el('span', { className: 'dot', style: `background:${c.color}` }),
     `${c.name}家`,
+    el('span', { className: `stars stars-${star}`, text: `${'★'.repeat(star)}${'☆'.repeat(5 - star)}` }),
     el('span', { className: 'sub', text: `${names}　石高 ${sum(ps, 'koku')}万石　兵 ${fmt(sum(ps, 'troops'))}` }),
   ]);
 }
