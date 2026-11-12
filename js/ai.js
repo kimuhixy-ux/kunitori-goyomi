@@ -58,11 +58,12 @@ function tryAttack(game, p, rand) {
   return null;
 }
 
-// 敵と接していない国の兵は、いちばん危ない前線の国へ送る
+// 敵と接していない国の兵は、いちばん危ない前線の国へ送る。
+// ただし前線は兵の上限まで。出口の少ない九州などで全土の兵が一国に集まり、本州をなぎ倒すのを防ぐ
 function tryReinforce(game, p) {
   if (enemyNeighbors(game, p).length > 0 || p.troops < 500) return false;
   const front = G.neighbors(game, p)
-    .filter((n) => G.canMove(game, p, n))
+    .filter((n) => G.canMove(game, p, n) && n.troops < G.troopCap(game, n))
     .sort((a, b) => enemyNeighbors(game, b).length - enemyNeighbors(game, a).length)[0];
   // 内地に武将が2人以上いれば、統率のいちばん高い者を前線へ出す
   const generals = G.generalsIn(game, p);
