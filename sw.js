@@ -21,8 +21,10 @@ const ASSETS = [
   'icons/icon-512.png',
 ];
 
+// ブラウザに残った古い控えを取りこまないよう、入れ替えのときは必ずサーバーから取り直す
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  const requests = ASSETS.map((url) => new Request(url, { cache: 'reload' }));
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(requests)).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {
