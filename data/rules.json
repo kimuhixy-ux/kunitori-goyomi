@@ -1,0 +1,21 @@
+{
+  "startYear": 1560,
+  "seasons": ["春", "夏", "秋", "冬"],
+  "busySeasons": [0, 2],
+  "harvestSeason": 2,
+  "winterSeason": 3,
+  "startRicePerKoku": 5,
+  "harvestPerKoku": 10,
+  "busyPenalty": 0.15,
+  "minHarvestRate": 0.4,
+  "upkeepPer100": 1,
+  "troopsPerKoku": 250,
+  "develop": { "cost": 40, "gain": 1, "maxRate": 1.5 },
+  "recruit": { "perKoku": 40, "costPer100": 2 },
+  "marchCostPer100": 2,
+  "minMarch": 200,
+  "castleBonus": 0.1,
+  "busyDefense": 0.75,
+  "battle": { "rounds": 6, "lossRate": 0.12, "breakRatio": 0.35 },
+  "victory": { "capital": "yamashiro", "provinces": 12 }
+}

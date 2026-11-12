@@ -1,0 +1,16 @@
+{
+  "name": "国盗り暦",
+  "short_name": "国盗り暦",
+  "description": "季節を読んで攻める、戦国時代の国盗り戦略ゲーム。",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#efe6d4",
+  "theme_color": "#3b2a1a",
+  "lang": "ja",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

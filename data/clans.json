@@ -1,0 +1,19 @@
+[
+  { "id": "oda", "name": "織田", "color": "#d1382e", "ink": "#fff", "player": true },
+  { "id": "imagawa", "name": "今川", "color": "#8a5cc0", "ink": "#fff", "aggression": 1.15, "army": 0.7 },
+  { "id": "takeda", "name": "武田", "color": "#c9a227", "ink": "#222", "aggression": 1.0, "army": 0.8 },
+  { "id": "hojo", "name": "北条", "color": "#2f8f6e", "ink": "#fff", "aggression": 1.35, "army": 0.7 },
+  { "id": "nagao", "name": "長尾", "color": "#3567b5", "ink": "#fff", "aggression": 1.05, "army": 0.8 },
+  { "id": "saito", "name": "斎藤", "color": "#6e8b3d", "ink": "#fff", "aggression": 1.25, "army": 0.6 },
+  { "id": "asai", "name": "浅井", "color": "#2a9fb0", "ink": "#fff", "aggression": 1.25, "army": 0.5 },
+  { "id": "rokkaku", "name": "六角", "color": "#b05a8c", "ink": "#fff", "aggression": 1.35, "army": 0.6 },
+  { "id": "asakura", "name": "朝倉", "color": "#e07b39", "ink": "#222", "aggression": 1.45, "army": 0.5 },
+  { "id": "miyoshi", "name": "三好", "color": "#5b5fc7", "ink": "#fff", "aggression": 1.45, "army": 0.7 },
+  { "id": "hatakeyama", "name": "畠山", "color": "#8c6d4f", "ink": "#fff", "aggression": 1.45, "army": 0.4 },
+  { "id": "tsutsui", "name": "筒井", "color": "#4d7c8a", "ink": "#fff", "aggression": 1.55, "army": 0.4 },
+  { "id": "kitabatake", "name": "北畠", "color": "#a4b43a", "ink": "#222", "aggression": 1.45, "army": 0.5 },
+  { "id": "hatano", "name": "波多野", "color": "#c46f6f", "ink": "#fff", "aggression": 1.55, "army": 0.4 },
+  { "id": "ikko", "name": "一向一揆", "color": "#555555", "ink": "#fff", "aggression": 1.25, "army": 0.6 },
+  { "id": "jinbo", "name": "神保", "color": "#7aa6d9", "ink": "#222", "aggression": 1.55, "army": 0.4 },
+  { "id": "wakasa", "name": "若狭武田", "color": "#c9a0dc", "ink": "#222", "aggression": 1.75, "army": 0.3 }
+]
