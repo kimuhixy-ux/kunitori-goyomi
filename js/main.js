@@ -8,7 +8,7 @@ const DATA_FILES = { clans: 'data/clans.json', provinces: 'data/provinces.json',
 // 保存の形を変えたら番号を上げ、古い保存を読みこまないようにする
 const SAVE_KEY = 'kunitori-goyomi-save-v1';
 
-const state = { data: null, game: null, picking: false, zoom: 1, selectedId: null, log: [], report: null, confirmReset: false, commanderId: null, escortId: null, helpOpen: false };
+const state = { data: null, game: null, picking: false, zoom: 1, selectedId: null, log: [], report: null, confirmReset: false, commanderId: null, escortId: null, tactic: 'assault', helpOpen: false };
 
 const $status = document.getElementById('status');
 const $map = document.getElementById('map');
@@ -191,7 +191,7 @@ function selectProvince(id) {
     return;
   }
   state.selectedId = state.selectedId === id ? null : id;
-  Object.assign(state, { commanderId: null, escortId: null });
+  Object.assign(state, { commanderId: null, escortId: null, tactic: 'assault' });
   state.report = null;
   state.confirmReset = false;
   render();
@@ -247,10 +247,17 @@ const HELP = [
   ['徴兵', '兵糧を使って兵を集める。'],
   ['築城', '兵糧を使って城を1段堅くする（★5まで）。城が堅いほど守りが強い。'],
   ['出陣', '隣の敵国へ兵の半数か8割で攻め込む。「有利・五分・不利」が勝算の目安。大将に統率の高い武将を選ぶと強い。勝てば国と大将がそちらへ移る。'],
+  ['策', '力攻めはふつうの攻め方。兵糧攻めは兵糧を3倍使い秋の収穫も減るが、こちらの損害が少なく堅い城に向く。夜襲は当たれば城の守りを無いものにして大きく削るが、外れると兵の4分の1を失う。統率の高い大将ほど当てやすい。'],
+  ['籠城と迎撃', '守る側は、城が弱く野戦でも負けない兵がいれば城を出て迎え撃つ。城の守りは使えないが、崩れた攻め手を追い討つ。'],
   ['移動', '兵の8割を隣の自分の国へ送る。「同行」で武将も連れて行ける。'],
   ['調略', '隣の敵国の家臣に寝返りを持ちかける。自分の国の武将の政務が高いほど成功しやすい。'],
   ['和睦', '隣の大名と1年間たがいに攻めない約束をする。相手より兵が多いほど応じやすい。断られても兵糧は減る。'],
   ['武将', '統率は合戦と守り、政務は開墾の費用・徴兵の人数・調略に効く。国にいる武将のうち一番得意な者の値が使われる。'],
+  ['忠誠', '家臣には忠誠がある。低いと敵の調略に乗りやすく、30を切ると出奔（家を去ること）しやすい。年が改まるたびに少し下がり、兵糧が尽きたときや大将として負けたときにも下がる。勝てば上がる。'],
+  ['褒美', '兵糧を使い、その国でいちばん忠誠の低い家臣の忠誠を上げる。'],
+  ['寿命', '年が進むほど武将は亡くなりやすくなる。当主が亡くなると家臣のひとりが家督を継ぎ、家臣の忠誠が下がる。春にはときどき若武者が元服して加わる。'],
+  ['捕虜', '城を落としたとき、逃げ場のない武将を捕らえることがある。登用（家臣にする。忠誠は低い）・解放（家臣の忠誠が上がる）・処断（家臣の忠誠が下がる）から選ぶ。決めずに季節を進めると解き放つ。'],
+  ['出来事', '夏に豊作・凶作の見込みが決まり、秋の収穫が増減する。長雨の国はその季節に兵を出せず、攻め込まれもしない。農繁期に兵を動かした国や奪ったばかりの国では一揆が起きることがある。疫病で兵が減ることも、大雪で雪国の隣まで雪に閉ざされる冬もある。'],
   ['民心', '奪ったばかりの国は1年間、収穫が半分になり徴兵もできない。'],
   ['包囲網', '10か国に達すると、隣の大名がこちらを優先して狙い、和睦にも応じなくなる。'],
   ['地図', '「＋ 拡大」「－ 縮小」で大きさを変える。iPhoneでは2本指で広げてもよい。PCではマウスで押したまま動かすと地図がずれる。'],
@@ -318,11 +325,46 @@ function pickClan(id) {
 function renderReport() {
   const r = state.report;
   const head = r.head ?? (r.won ? `${r.to}を奪った！` : `${r.to}を落とせなかった`);
+  const captives = r.captives?.length ? captiveBox(G.province(state.game, r.toId)) : [];
   $panel.replaceChildren(
     el('h2', { text: head }),
     el('ul', { className: 'lines' }, r.lines.map((t) => el('li', { text: t }))),
+    ...captives,
     backButton(),
   );
+}
+
+// 捕らえた武将の処遇。合戦の報告からも、その国の画面からも決められる
+function captiveBox(p) {
+  const { game } = state;
+  const captives = G.captivesIn(game, p);
+  if (captives.length === 0) return [];
+  const { loyalty } = game.data.rules;
+  return [el('h3', { text: '捕らえた武将（決めずに季節を進めると解き放つ）' }), el('div', { className: 'commands' }, captives.map((g) => el('div', { className: 'target' }, [
+    el('div', { text: `${generalLabel(g)}（${G.clanInfo(game, g.clan).name}家）` }),
+    el('div', { className: 'row three' }, [
+      cmdButton('登用', g.lord ? '当主は仕えない' : `忠誠${loyalty.captive}で家臣に`, G.canHire(g), () => decideCaptive(g, 'hire')),
+      cmdButton('解放', `家臣の忠誠 +${loyalty.mercy}`, true, () => decideCaptive(g, 'release')),
+      cmdButton('処断', `家臣の忠誠 -${loyalty.cruelty}`, true, () => decideCaptive(g, 'execute')),
+    ]),
+  ])))];
+}
+
+function captiveResult(g, how) {
+  const { game } = state;
+  if (how === 'hire') return G.hireCaptive(game, g) ? [`${g.name}を登用した。`] : [];
+  if (how === 'release') {
+    return G.releaseCaptive(game, g) ? [`${g.name}を${G.clanInfo(game, g.clan).name}家へ帰した。家臣の忠誠が上がった。`]
+      : [`${g.name}を解き放った。主家はもう無く、どこかへ去った。家臣の忠誠が上がった。`];
+  }
+  return [`${g.name}を処断した。家臣の忠誠が下がった。`, ...G.executeCaptive(game, g)];
+}
+
+function decideCaptive(g, how) {
+  const lines = captiveResult(g, how);
+  if (state.report) state.report.lines.push(...lines);
+  else state.report = { head: '捕虜の処遇', lines };
+  render();
 }
 
 function renderResult() {
@@ -346,6 +388,10 @@ function provinceFacts(p) {
   if (p.snow) facts.push('雪国');
   if (p.capital) facts.push('京');
   if (p.unrest) facts.push(`民心が乱れている（あと${p.unrest}季節）`);
+  if (p.crop > 1) facts.push('豊作の見込み');
+  if (p.crop < 1) facts.push('凶作の見込み');
+  if (p.rain) facts.push('長雨（兵を動かせない）');
+  if (p.heavySnow && G.snowedIn(game, p)) facts.push('大雪');
   const truce = p.clan === game.player ? 0 : G.truceLeft(game, game.player, p.clan);
   if (truce) facts.push(`和睦中（あと${truce}季節）`);
   return el('div', { className: 'facts' }, facts.map((f) => el('span', { text: f })));
@@ -358,11 +404,16 @@ function renderProvince(p) {
   if (!mine) body = [el('p', { text: `守りの力 ${fmt(Math.round(G.defensePower(game, p)))}（兵×城×季節）` })];
   else if (p.acted) body = [el('p', { text: 'この国はこの季節、もう命令を終えた。' })];
   else body = commandList(p);
-  $panel.replaceChildren(el('h2', { text: p.name }), provinceFacts(p), generalList(p), ...body, backButton());
+  const captives = mine ? captiveBox(p) : [];
+  $panel.replaceChildren(el('h2', { text: p.name }), provinceFacts(p), generalList(p), ...captives, ...body, backButton());
 }
 
+// 忠誠は自分の家臣にだけ見せる（他家の家臣の心は外からは分からない）
 function generalLabel(g) {
-  return `${g.name}${g.lord ? '（当主）' : ''}　統率${g.lead}・政務${g.admin}`;
+  const { game } = state;
+  const own = g.clan === game.player && !g.lord && !g.captive;
+  const loyalty = own ? `・忠誠${g.loyalty}${g.loyalty < game.data.rules.loyalty.leave ? '（出奔のおそれ）' : ''}` : '';
+  return `${g.name}${g.lord ? '（当主）' : ''}　統率${g.lead}・政務${g.admin}${loyalty}`;
 }
 
 // 国の働きは武将の能力で変わるので、敵の国でも誰がいるかは見せる
@@ -400,20 +451,31 @@ function act(fn) {
   };
 }
 
-function commandList(p) {
+function internalList(p, busy) {
   const { game } = state;
-  const { develop } = game.data.rules;
+  const { develop, loyalty } = game.data.rules;
   const plan = G.recruitPlan(game, p);
-  const busy = G.isBusySeason(game) ? '（農繁期：秋の収穫が減る）' : '';
   const unrest = p.unrest ? '　民心が乱れて兵が集まらない' : '';
-  const list = [
+  const target = G.rewardTarget(game, p);
+  const rewardButton = target
+    ? [cmdButton(`褒美：${target.name}`, `兵糧 ${loyalty.rewardCost} → 忠誠 ${target.loyalty} → ${Math.min(loyalty.max, target.loyalty + loyalty.reward)}`,
+      G.canReward(game, p), act(() => G.reward(game, p)))]
+    : [];
+  return [
     cmdButton('開墾', `兵糧 ${G.developCost(game, p)} → 石高 +${develop.gain}万石（上限 ${Math.floor(p.baseKoku * develop.maxRate)}）`,
       G.canDevelop(game, p), act(() => G.develop(game, p))),
     cmdButton('徴兵', `兵 +${fmt(plan.amount)}　兵糧 ${plan.cost}　上限 ${fmt(G.troopCap(game, p))}${busy}${unrest}`,
       G.canRecruit(game, p), act(() => G.recruit(game, p))),
     cmdButton('築城', p.castle >= game.data.rules.fortify.max ? '城はもう最も堅い' : `兵糧 ${G.fortifyCost(game, p)} → 城 ★${p.castle + 1}（守りが強くなる）${busy}`,
       G.canFortify(game, p), act(() => G.fortify(game, p))),
+    ...rewardButton,
   ];
+}
+
+function commandList(p) {
+  const { game } = state;
+  const busy = G.isBusySeason(game) ? '（農繁期：秋の収穫が減る）' : '';
+  const list = internalList(p, busy);
   const enemies = G.neighbors(game, p).filter((n) => n.clan !== game.player);
   const friends = G.neighbors(game, p).filter((n) => n.clan === game.player);
   const hasGenerals = G.generalsIn(game, p).length > 0;
@@ -421,7 +483,7 @@ function commandList(p) {
   const escort = hasGenerals ? [el('label', { className: 'pick-row' }, ['同行', generalSelect(p, 'escortId', 'だれも行かない')])] : [];
   return [
     el('h3', { text: '内政' }), el('div', { className: 'commands' }, list),
-    ...(enemies.length ? [el('h3', { text: `出陣${busy}` }), ...commander, el('div', { className: 'commands' }, enemies.map((n) => marchTarget(p, n)))] : []),
+    ...(enemies.length ? [el('h3', { text: `出陣${busy}` }), ...commander, tacticSelect(p), el('div', { className: 'commands' }, enemies.map((n) => marchTarget(p, n)))] : []),
     ...diplomacyList(p, enemies),
     ...(friends.length ? [el('h3', { text: '移動（兵の8割を送る）' }), ...escort, el('div', { className: 'commands' }, friends.map((n) => moveButton(p, n)))] : []),
   ];
@@ -470,6 +532,24 @@ function doTruce(p, clanId) {
   render();
 }
 
+// 策を選ぶ欄。夜襲の見込みは大将で変わるので、選んでいる大将で計算する
+function tacticSelect(p) {
+  const { game } = state;
+  const commander = G.generalsIn(game, p).find((g) => g.id === state.commanderId) ?? G.generalsIn(game, p)[0];
+  const labels = {
+    assault: '力攻め',
+    siege: `兵糧攻め（兵糧${game.data.rules.tactics.siegeCost}倍・損害少・収穫減）`,
+    night: `夜襲（当たる見込み ${pct(G.nightChance(game, commander))}）`,
+  };
+  const select = el('select', { className: 'pick', onchange: () => { state.tactic = select.value; render(); } },
+    Object.entries(labels).map(([value, text]) => el('option', { value, text })));
+  select.value = state.tactic;
+  return el('label', { className: 'pick-row' }, ['策', select]);
+}
+
+// 兵糧攻めは攻め手の損害が守り手より軽く済むぶん、勝算を上乗せして見せる
+const SIEGE_EDGE = 1.2;
+
 // 勝算は「出す兵 ÷ 守りの力」でざっくり3段階に。合戦には運の幅があるので数字は見せすぎない
 function odds(size, power) {
   const r = power === 0 ? 9 : size / power;
@@ -482,17 +562,17 @@ function marchTarget(p, n) {
   const { game } = state;
   const power = Math.round(G.defensePower(game, n));
   const commander = G.generalsIn(game, p).find((g) => g.id === state.commanderId);
-  const factor = G.attackFactor(game, p, commander);
+  const factor = G.attackFactor(game, p, commander) * (state.tactic === 'siege' ? SIEGE_EDGE : 1);
   const buttons = [0.5, 0.8].map((ratio) => {
     const size = G.marchSize(p, ratio);
     const [label, cls] = odds(size * factor, power);
     return el('button', {
-      className: 'cmd', type: 'button', disabled: !G.canMarch(game, p, n, ratio),
+      className: 'cmd', type: 'button', disabled: !G.canMarch(game, p, n, ratio, state.tactic),
       onclick: () => doMarch(p, n, ratio),
-    }, [`${ratio === 0.5 ? '半数' : '8割'} ${fmt(size)}`, el('span', { className: `sub ${cls}`, text: `${label}・兵糧 ${G.marchCost(game, size)}` })]);
+    }, [`${ratio === 0.5 ? '半数' : '8割'} ${fmt(size)}`, el('span', { className: `sub ${cls}`, text: `${label}・兵糧 ${G.marchCost(game, size, state.tactic)}` })]);
   });
   const truce = G.truceLeft(game, p.clan, n.clan);
-  const snow = (G.snowedIn(game, n) || G.snowedIn(game, p) ? '　❄雪で動けない' : '') + (truce ? `　和睦中（あと${truce}季節）` : '');
+  const snow = (G.snowedIn(game, n) || G.snowedIn(game, p) ? '　❄雪で動けない' : '') + (n.rain || p.rain ? '　長雨で動けない' : '') + (truce ? `　和睦中（あと${truce}季節）` : '');
   return el('div', { className: 'target' }, [
     el('div', { text: `${n.name}（${G.clanInfo(game, n.clan).name}家）守りの力 ${fmt(power)}${snow}` }),
     el('div', { className: 'row' }, buttons),
@@ -500,7 +580,7 @@ function marchTarget(p, n) {
 }
 
 function doMarch(p, n, ratio) {
-  const result = G.march(state.game, p, n, ratio, Math.random, state.commanderId);
+  const result = G.march(state.game, p, n, ratio, Math.random, state.commanderId, state.tactic);
   if (!result) return;
   state.report = result;
   render();

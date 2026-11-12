@@ -1,6 +1,7 @@
-// 季節の終わりの処理。CPU の行動 → 兵糧の消費 → 秋なら収穫 → 勝ち負けの判定、の順に進める
+// 季節の終わりの処理。CPU の行動 → 秋なら収穫 → 兵糧の消費 → 次の季節の出来事 → 勝ち負けの判定、の順に進める
 import * as G from './game.js';
 import { cpuTurn } from './ai.js';
+import { seasonEvents, clearSeasonEffects } from './events.js';
 
 function fmt(n) {
   return n.toLocaleString('ja-JP');
@@ -12,7 +13,14 @@ function clanName(game, id) {
 
 function battleLine(game, r) {
   const outcome = r.won ? `${r.to}を奪った` : '退けられた';
-  return `${clanName(game, r.attacker)}が${r.from}から${r.to}（${clanName(game, r.defender)}）へ${fmt(r.size)}で攻め込み、${outcome}。`;
+  const tactic = r.tactic && r.tactic !== 'assault' ? `${G.TACTICS[r.tactic]}で` : '';
+  return `${clanName(game, r.attacker)}が${r.from}から${r.to}（${clanName(game, r.defender)}）へ${fmt(r.size)}で${tactic}攻め込み、${outcome}。`;
+}
+
+// 他家どうしの調略までは知らせない。自分の家臣が狙われたときだけ伝える
+function plotLine(game, r) {
+  const outcome = r.ok ? `${r.name}は寝返った。` : `${r.name}は誘いを断った。`;
+  return { text: `${clanName(game, r.attacker)}が${r.to}の${r.name}に寝返りを持ちかけた。${outcome}`, mine: true };
 }
 
 function runCpu(game, rand) {
@@ -23,6 +31,10 @@ function runCpu(game, rand) {
     if (!game.clans[id].alive) continue;
     for (const r of cpuTurn(game, id, rand)) {
       const mine = r.defender === game.player;
+      if (r.plot) {
+        if (mine) lines.push(plotLine(game, r));
+        continue;
+      }
       lines.push({ text: battleLine(game, r), mine, detail: mine ? r.lines : null });
     }
   }
@@ -38,7 +50,9 @@ function payUpkeep(game) {
     if (clan.rice >= 0) continue;
     clan.rice = 0;
     for (const p of G.provincesOf(game, id)) p.troops = Math.floor(p.troops * 0.85);
-    if (id === game.player) lines.push({ text: '兵糧が尽き、兵が逃げ出した（各国の兵 -15%）。', mine: true });
+    // 兵を養えない主君からは家臣の心も離れる
+    G.changeLoyalty(game, id, -game.data.rules.loyalty.starve);
+    if (id === game.player) lines.push({ text: '兵糧が尽き、兵が逃げ出した（各国の兵 -15%）。家臣の忠誠が下がった。', mine: true });
   }
   return lines;
 }
@@ -50,17 +64,28 @@ function harvest(game) {
   for (const p of game.provinces) {
     const amount = p.koku * harvestPerKoku;
     const unrest = p.unrest ? game.data.rules.unrest.harvestRate : 1;
-    const rate = Math.max(minHarvestRate, 1 - busyPenalty * p.busy) * unrest;
+    const rate = Math.max(minHarvestRate, 1 - busyPenalty * p.busy) * unrest * (p.crop ?? 1);
     game.clans[p.clan].rice += Math.round(amount * rate);
     if (p.clan === game.player) {
       full += amount;
       got += Math.round(amount * rate);
     }
     p.busy = 0;
+    p.crop = 1;
   }
   const loss = full - got;
-  const note = loss > 0 ? `（農繁期の動員と民心の乱れで -${fmt(loss)}）` : '';
+  const note = loss > 0 ? `（動員・民心・凶作で -${fmt(loss)}）` : loss < 0 ? `（豊作で +${fmt(-loss)}）` : '';
   return [{ text: `秋の収穫：兵糧 +${fmt(got)}${note}`, mine: true }];
+}
+
+// 処遇を決めないまま季節を越した捕虜は、そのまま解き放つ（情けをかけたことにはならない）
+function releaseLeftCaptives(game) {
+  const lines = [];
+  for (const g of game.generals.filter((x) => x.alive && x.captive === game.player)) {
+    G.releaseCaptive(game, g, false);
+    lines.push({ text: `処遇を決めなかった${g.name}を解き放った。`, mine: true });
+  }
+  return lines;
 }
 
 function judge(game) {
@@ -74,13 +99,15 @@ export function endSeason(game, rand = Math.random) {
   const lines = runCpu(game, rand);
   // 秋は取れた米で兵を養うので、収穫を先にする
   if (game.season === game.data.rules.harvestSeason) lines.push(...harvest(game));
-  lines.push(...payUpkeep(game));
+  lines.push(...payUpkeep(game), ...releaseLeftCaptives(game));
   for (const p of game.provinces) {
     p.acted = false;
     if (p.unrest) p.unrest -= 1;
   }
+  clearSeasonEffects(game);
   game.season = (game.season + 1) % 4;
   if (game.season === 0) game.year += 1;
+  lines.push(...seasonEvents(game, rand));
   judge(game);
   return lines;
 }

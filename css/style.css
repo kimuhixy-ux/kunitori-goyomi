@@ -161,6 +161,7 @@ main { max-width: 520px; margin: 0 auto; padding: 8px 16px 0; }
 .target { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
 .target .row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
 .target .cmd { text-align: center; }
+.target .row.three { grid-template-columns: 1fr 1fr 1fr; }
 
 .odds-high { color: var(--good); font-weight: 700; }
 .odds-even { color: var(--muted); font-weight: 700; }

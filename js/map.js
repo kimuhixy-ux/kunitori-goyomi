@@ -46,6 +46,7 @@ function provinceNode(game, p, selectedId, onTap) {
   g.append(svgEl('text', { class: 'name', x: p.x, y: p.y - 0.2, 'text-anchor': 'middle', fill: clan.ink }, p.name));
   g.append(svgEl('text', { class: 'troops', x: p.x, y: p.y + 2.9, 'text-anchor': 'middle', fill: clan.ink }, compact(p.troops)));
   if (G.snowedIn(game, p)) g.append(svgEl('text', { class: 'snow', x: p.x + 4, y: p.y - 3.8 }, '❄'));
+  if (p.rain) g.append(svgEl('text', { class: 'snow', x: p.x + 4, y: p.y + 6 }, '☔'));
   if (p.capital) g.append(svgEl('text', { class: 'snow', x: p.x - 7, y: p.y - 3.8 }, '京'));
   g.addEventListener('click', () => onTap(p.id));
   return g;

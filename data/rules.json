@@ -23,5 +23,9 @@
   "truce": { "costPerProvince": 20, "seasons": 4 },
   "unrest": { "seasons": 4, "harvestRate": 0.5 },
   "siege": { "provinces": 10, "aggression": 0.8 },
+  "events": { "bumper": 0.08, "poor": 0.08, "cropRate": 0.3, "rain": 0.05, "plague": 0.02, "plagueLoss": 0.15, "riotBusy": 0.08, "riotUnrest": 0.05, "riotLoss": 0.2, "heavySnow": 0.3 },
+  "loyalty": { "start": 55, "spread": 41, "captive": 35, "plotted": 40, "reward": 15, "rewardCost": 30, "max": 100, "yearly": 3, "leave": 30, "leaveChance": 0.15, "win": 5, "lose": 5, "starve": 10, "succession": 10, "mercy": 5, "cruelty": 5 },
+  "age": { "death": 0.015, "deathPerYear": 0.003, "comingOfAge": 0.35, "minStat": 40, "maxStat": 80 },
+  "tactics": { "siegeCost": 3, "siegeAttackLoss": 0.5, "siegeDefendLoss": 0.6, "siegeBusy": 1, "nightBase": 0.25, "nightMin": 0.1, "nightMax": 0.6, "nightHit": 0.35, "nightMiss": 0.25, "pursuit": 0.2 },
   "victory": { "capital": "yamashiro", "provinces": 35 }
 }

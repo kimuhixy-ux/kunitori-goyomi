@@ -46,16 +46,41 @@ function pickTarget(game, targets) {
   return pool.reduce((a, b) => (G.defensePower(game, a) <= G.defensePower(game, b) ? a : b));
 }
 
+// 統率の高い大将はときどき夜襲を狙い、堅い城は兵糧に余裕があれば囲んで落とす
+function chooseTactic(game, p, target, rand) {
+  if (G.nightChance(game, G.generalsIn(game, p)[0]) >= 0.4 && rand() < 0.3) return 'night';
+  if (target.castle >= 3 && game.clans[p.clan].rice > upkeep(game, p.clan) * 6) return 'siege';
+  return 'assault';
+}
+
 function tryAttack(game, p, rand) {
   const targets = enemyNeighbors(game, p).filter((n) => G.canMarch(game, p, n, 0.5));
   if (targets.length === 0) return null;
   const weakest = pickTarget(game, targets);
+  const tactic = chooseTactic(game, p, weakest, rand);
   for (const ratio of [0.8, 0.6]) {
     const size = G.marchSize(p, ratio);
     if (size * G.attackFactor(game, p) < G.defensePower(game, weakest) * aggressionAgainst(game, p.clan, weakest) || !safeToLeave(game, p, weakest, size)) continue;
-    return G.march(game, p, weakest, ratio, rand);
+    return G.march(game, p, weakest, ratio, rand, null, G.canMarch(game, p, weakest, ratio, tactic) ? tactic : 'assault');
   }
   return null;
+}
+
+// 見込みのある寝返り工作だけを仕掛ける。兵糧の蓄えは崩さない
+function tryPlot(game, p, rand) {
+  if (game.clans[p.clan].rice - game.data.rules.plot.cost < upkeep(game, p.clan) * 4) return null;
+  const target = enemyNeighbors(game, p).find((n) => G.canPlot(game, p, n) && G.plotChance(game, p, n) >= 0.35);
+  if (!target || rand() >= 0.5) return null;
+  const r = G.plot(game, p, target, rand);
+  return { plot: true, ...r, attacker: p.clan, defender: target.clan, to: target.name };
+}
+
+// 出奔しそうな家臣には褒美を与えてつなぎとめる
+function tryReward(game, p) {
+  const target = G.rewardTarget(game, p);
+  if (!target || target.loyalty >= 45) return false;
+  if (game.clans[p.clan].rice - game.data.rules.loyalty.rewardCost < upkeep(game, p.clan) * 4) return false;
+  return Boolean(G.reward(game, p));
 }
 
 // 敵と接していない国の兵は、いちばん危ない前線の国へ送る。
@@ -97,7 +122,12 @@ export function cpuTurn(game, clanId, rand) {
       reports.push(report);
       continue;
     }
-    if (tryReinforce(game, p) || tryRecruit(game, p) || tryFortify(game, p)) continue;
+    if (tryReinforce(game, p) || tryRecruit(game, p) || tryFortify(game, p) || tryReward(game, p)) continue;
+    const plot = tryPlot(game, p, rand);
+    if (plot) {
+      reports.push(plot);
+      continue;
+    }
     if (game.clans[clanId].rice > upkeep(game, clanId) * 4) G.develop(game, p);
   }
   return reports;
