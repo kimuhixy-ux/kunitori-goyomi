@@ -3,7 +3,7 @@ import * as G from './game.js';
 import { endSeason } from './turn.js';
 import { renderMap } from './map.js';
 
-const DATA_FILES = { clans: 'data/clans.json', provinces: 'data/provinces.json', rules: 'data/rules.json' };
+const DATA_FILES = { clans: 'data/clans.json', provinces: 'data/provinces.json', rules: 'data/rules.json', coast: 'data/coast.json' };
 
 const state = { game: null, selectedId: null, log: [], report: null };
 

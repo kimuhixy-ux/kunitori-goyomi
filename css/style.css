@@ -10,6 +10,9 @@
   --mine: #e8b23a;
   --warn: #b23a3a;
   --good: #2f7a3e;
+  --sea: #b9cfd6;
+  --land: #e9dcc0;
+  --coast: #8fa5a8;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -25,6 +28,9 @@
     --mine: #f0c552;
     --warn: #f08a8a;
     --good: #7fcf8c;
+    --sea: #17242a;
+    --land: #3a3226;
+    --coast: #4f6468;
   }
 }
 
@@ -61,12 +67,14 @@ body {
 
 main { max-width: 520px; margin: 0 auto; padding: 8px 16px 0; }
 
-.map { display: block; width: 100%; height: auto; }
+.map { display: block; width: 100%; height: auto; background: var(--sea); border-radius: 12px; }
+.map .land { fill: var(--land); stroke: var(--coast); stroke-width: 0.4; stroke-linejoin: round; }
+.map .lake { fill: var(--sea); stroke: var(--coast); stroke-width: 0.3; }
 .map .edge { stroke: var(--edge); stroke-width: 0.5; }
 .map .node { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .map .node text { pointer-events: none; font-weight: 700; }
-.map .name { font-size: 3.3px; }
-.map .node .troops { font-size: 2.8px; font-weight: 400; }
+.map .name { font-size: 2.8px; }
+.map .node .troops { font-size: 2.4px; font-weight: 400; }
 .map .ring-mine { fill: none; stroke: var(--mine); stroke-width: 1.2; }
 .map .ring-selected { fill: none; stroke: var(--text); stroke-width: 0.8; stroke-dasharray: 1.5 1; }
 .map .done { opacity: 0.5; }
