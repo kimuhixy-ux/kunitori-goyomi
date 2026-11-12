@@ -54,6 +54,22 @@ body {
 
 .status h1 { margin: 0 0 4px; font-size: 17px; letter-spacing: 0.1em; }
 
+.title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; max-width: 520px; }
+
+.reset {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+/* 1回目を押したあとは色を変え、もう一度押すと消えることを目で分かるようにする */
+.reset.confirm { background: var(--warn); border-color: var(--warn); color: var(--accent-text); font-weight: 700; }
+
 .status dl {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

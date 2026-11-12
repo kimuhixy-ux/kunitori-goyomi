@@ -14,6 +14,7 @@ const $status = document.getElementById('status');
 const $map = document.getElementById('map');
 const $panel = document.getElementById('panel');
 const $next = document.getElementById('next');
+const $reset = document.getElementById('reset');
 
 // 外部データを innerHTML に流さないよう、要素はすべてこの関数で作る
 function el(tag, props = {}, children = []) {
@@ -84,6 +85,8 @@ function render() {
   else if (state.selectedId) renderProvince(G.province(state.game, state.selectedId));
   else renderHome();
   $next.disabled = Boolean(state.game.result);
+  $reset.textContent = state.confirmReset ? 'もう一度押すと最初から' : '最初から';
+  $reset.classList.toggle('confirm', state.confirmReset);
 }
 
 function selectProvince(id) {
@@ -128,24 +131,17 @@ function renderHome() {
     ...(state.log.length ? [el('h3', { text: '前の季節の出来事' }), logList(state.log)] : []),
     el('h3', { text: '諸大名' }),
     clanList(),
-    resetButton(),
   );
 }
 
 // 押し間違いで保存を消さないよう、2回押して初めてやり直す
-function resetButton() {
-  const label = state.confirmReset ? '本当に最初からやり直す（もう一度押す）' : '最初からやり直す';
-  return el('button', {
-    className: 'back', type: 'button', text: label,
-    onclick: () => {
-      if (state.confirmReset) {
-        start(true);
-      } else {
-        state.confirmReset = true;
-        render();
-      }
-    },
-  });
+function onReset() {
+  if (state.confirmReset) {
+    start(true);
+  } else {
+    state.confirmReset = true;
+    render();
+  }
 }
 
 function renderReport() {
@@ -285,6 +281,7 @@ async function start(fresh = false) {
 }
 
 $next.addEventListener('click', nextSeason);
+$reset.addEventListener('click', onReset);
 start();
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
