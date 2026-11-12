@@ -2,13 +2,14 @@
 import * as G from './game.js';
 import { endSeason } from './turn.js';
 import { renderMap } from './map.js';
+import { advise } from './advice.js';
 
 const DATA_FILES = { clans: 'data/clans.json', provinces: 'data/provinces.json', rules: 'data/rules.json', coast: 'data/coast.json', generals: 'data/generals.json' };
 
 // 保存の形を変えたら番号を上げ、古い保存を読みこまないようにする
 const SAVE_KEY = 'kunitori-goyomi-save-v1';
 
-const state = { data: null, game: null, picking: false, zoom: 1, selectedId: null, log: [], report: null, confirmReset: false, commanderId: null, escortId: null, tactic: 'assault', helpOpen: false };
+const state = { data: null, game: null, picking: false, zoom: 1, selectedId: null, log: [], report: null, confirmReset: false, commanderId: null, escortId: null, tactic: 'assault', helpOpen: false, adviceOpen: false };
 
 const $status = document.getElementById('status');
 const $map = document.getElementById('map');
@@ -234,8 +235,34 @@ function renderHome() {
     ...(state.log.length ? [el('h3', { text: '前の季節の出来事' }), logList(state.log)] : []),
     el('h3', { text: '諸大名' }),
     clanList(),
+    adviceSummary(),
     chronicleBox(),
   );
+}
+
+// 進言は上位3つまで。多く並べると、かえって迷わせるため
+function adviceBox(p) {
+  const list = advise(state.game, p).slice(0, 3);
+  if (list.length === 0) return [];
+  return [el('div', { className: 'advice' }, [
+    el('h3', { text: '軍師の進言' }),
+    el('ol', { className: 'lines' }, list.map((a) => el('li', {}, [a.title, el('span', { className: 'detail', text: a.why })]))),
+  ])];
+}
+
+// まだ命令していない国ごとに、いちばんの進言を並べる。押すとその国を開く
+function adviceSummary() {
+  const { game } = state;
+  const items = G.provincesOf(game, game.player).filter((p) => !p.acted)
+    .map((p) => ({ p, a: advise(game, p)[0] }))
+    .sort((x, y) => y.a.score - x.a.score);
+  if (items.length === 0) return el('p', { className: 'facts', text: 'すべての国が命令を終えた。季節を進める。' });
+  const box = el('details', { className: 'help', open: state.adviceOpen }, [
+    el('summary', { text: `軍師の進言（${items.length}か国）` }),
+    el('div', { className: 'commands advice-list' }, items.map(({ p, a }) => cmdButton(`${p.name}：${a.title}`, a.why, true, () => selectProvince(p.id)))),
+  ]);
+  box.addEventListener('toggle', () => { state.adviceOpen = box.open; });
+  return box;
 }
 
 // 遊び方。[見出し, 本文] の組で並べる
@@ -258,6 +285,7 @@ const HELP = [
   ['武将', '統率は合戦と守り、政務は開墾の費用・徴兵の人数・調略に効く。国にいる武将のうち一番得意な者の値が使われる。'],
   ['忠誠', '家臣には忠誠がある。低いと敵の調略に乗りやすく、30を切ると出奔（家を去ること）しやすい。年が改まるたびに少し下がり、兵糧が尽きたときや大将として負けたときにも下がる。勝てば上がる。'],
   ['特技', '一部の武将は特技を持つ。築城（普請が安い）・開墾（開墾が安い）・調略（成功しやすい）・兵站（出陣の兵糧が半分）は国にいるだけで効く。鉄砲は大将なら攻めが、国にいれば守りが強くなる。夜戦は大将のとき夜襲が当たりやすい。元服した若武者も特技を持つことがある。'],
+  ['軍師の進言', '自分の国を開くと、その国でやるとよい命令を軍師が理由つきで3つまで勧める。全体画面の「軍師の進言」には、まだ命令していない国ごとのいちばんのおすすめが急ぐ順に並び、押すとその国を開く。あくまで目安で、従わなくてもよい。'],
   ['年表', '国の取り合い・家督・出奔・同盟などの出来事が記録される。ふだんは下の「年表」で、決着がつくと勝ち負けの数や領国の移り変わりと一緒に見られる。'],
   ['褒美', '兵糧を使い、その国でいちばん忠誠の低い家臣の忠誠を上げる。'],
   ['寿命', '年が進むほど武将は亡くなりやすくなる。当主が亡くなると家臣のひとりが家督を継ぎ、家臣の忠誠が下がる。春にはときどき若武者が元服して加わる。'],
@@ -453,7 +481,7 @@ function renderProvince(p) {
   else if (p.acted) body = [el('p', { text: 'この国はこの季節、もう命令を終えた。' })];
   else body = commandList(p);
   const captives = mine ? captiveBox(p) : [];
-  $panel.replaceChildren(el('h2', { text: p.name }), provinceFacts(p), generalList(p), ...captives, ...body, backButton());
+  $panel.replaceChildren(el('h2', { text: p.name }), provinceFacts(p), generalList(p), ...captives, ...adviceBox(p), ...body, backButton());
 }
 
 // 忠誠は自分の家臣にだけ見せる（他家の家臣の心は外からは分からない）

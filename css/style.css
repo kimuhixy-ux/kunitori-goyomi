@@ -211,3 +211,8 @@ main { max-width: 520px; margin: 0 auto; padding: 8px 16px 0; }
 .bar-year, .bar-num { color: var(--muted); font-variant-numeric: tabular-nums; }
 .bar-num { text-align: right; }
 .chronicle { padding: 0 12px 10px; max-height: 50vh; overflow: auto; }
+
+/* 進言は命令の一覧と見分けがつくよう、枠で囲む */
+.advice { margin: 8px 0; padding: 2px 10px; border: 1px dashed var(--accent); border-radius: 10px; }
+.advice h3 { color: var(--accent); }
+.advice-list { padding: 0 12px 10px; }
