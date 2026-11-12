@@ -27,5 +27,7 @@
   "loyalty": { "start": 55, "spread": 41, "captive": 35, "plotted": 40, "reward": 15, "rewardCost": 30, "max": 100, "yearly": 3, "leave": 30, "leaveChance": 0.15, "win": 5, "lose": 5, "starve": 10, "succession": 10, "mercy": 5, "cruelty": 5 },
   "age": { "death": 0.015, "deathPerYear": 0.003, "comingOfAge": 0.35, "minStat": 40, "maxStat": 80 },
   "tactics": { "siegeCost": 3, "siegeAttackLoss": 0.5, "siegeDefendLoss": 0.6, "siegeBusy": 1, "nightBase": 0.25, "nightMin": 0.1, "nightMax": 0.6, "nightHit": 0.35, "nightMiss": 0.25, "pursuit": 0.2 },
+  "skills": { "chance": 0.45, "fortifyCost": 0.6, "developCost": 0.6, "plot": 0.15, "night": 0.15, "gun": 1.1, "supply": 0.5 },
+  "alliance": { "costPerProvince": 30, "base": 0.25, "truceBonus": 0.15, "max": 0.6, "aid": 0.3, "marriageAid": 0.5, "marriageCost": 100, "minAid": 300, "betray": 0.01, "betrayGrowth": 0.02, "betrayMax": 0.08, "breakLoyalty": 10, "cpu": 0.04 },
   "victory": { "capital": "yamashiro", "provinces": 35 }
 }

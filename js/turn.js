@@ -23,12 +23,32 @@ function plotLine(game, r) {
   return { text: `${clanName(game, r.attacker)}が${r.to}の${r.name}に寝返りを持ちかけた。${outcome}`, mine: true };
 }
 
-function runCpu(game, rand) {
+// 大きくなった同盟相手は、季節の初めに約束を破ってそのまま攻めてくることがある
+function rollBetrayals(game, rand) {
   const lines = [];
+  for (const key of Object.keys(game.alliances)) {
+    const [a, b] = key.split('|');
+    const betrayer = G.troopsOf(game, a) >= G.troopsOf(game, b) ? a : b;
+    const victim = betrayer === a ? b : a;
+    if (!game.clans[a].alive || !game.clans[b].alive) {
+      delete game.alliances[key];
+      continue;
+    }
+    if (betrayer === game.player || rand() >= G.betrayChance(game, betrayer, victim)) continue;
+    G.betray(game, betrayer, victim);
+    if (victim === game.player) lines.push({ text: `${clanName(game, betrayer)}が同盟を破った！`, mine: true });
+  }
+  return lines;
+}
+
+function runCpu(game, rand) {
+  const lines = rollBetrayals(game, rand);
   const order = game.data.clans.map((c) => c.id).filter((id) => id !== game.player && game.clans[id].alive);
   order.sort(() => rand() - 0.5);
   for (const id of order) {
     if (!game.clans[id].alive) continue;
+    const partner = G.cpuAlly(game, id, rand);
+    if (partner) lines.push({ text: `${clanName(game, id)}と${clanName(game, partner)}が同盟を結んだ。` });
     for (const r of cpuTurn(game, id, rand)) {
       const mine = r.defender === game.player;
       if (r.plot) {
@@ -108,6 +128,8 @@ export function endSeason(game, rand = Math.random) {
   game.season = (game.season + 1) % 4;
   if (game.season === 0) game.year += 1;
   lines.push(...seasonEvents(game, rand));
+  // 領国の数の移り変わりは年の初めに一度だけ記録する
+  if (game.season === 0) game.stats.history.push({ year: game.year, count: G.provincesOf(game, game.player).length });
   judge(game);
   return lines;
 }

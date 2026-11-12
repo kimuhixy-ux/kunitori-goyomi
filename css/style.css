@@ -203,3 +203,11 @@ main { max-width: 520px; margin: 0 auto; padding: 8px 16px 0; }
 
 /* 大名選びのボタンでは家の色を名前の前に並べる */
 .cmd .dot { display: inline-block; margin-right: 6px; vertical-align: -1px; }
+
+/* 領国の数を横棒で見せる。年の数だけ並ぶので細めにする */
+.bars { list-style: none; margin: 6px 0; padding: 0; font-size: 12px; display: grid; gap: 2px; }
+.bars li { display: grid; grid-template-columns: 3.2em 1fr 2em; align-items: center; gap: 6px; }
+.bar { display: block; height: 8px; border-radius: 4px; background: var(--mine); }
+.bar-year, .bar-num { color: var(--muted); font-variant-numeric: tabular-nums; }
+.bar-num { text-align: right; }
+.chronicle { padding: 0 12px 10px; max-height: 50vh; overflow: auto; }

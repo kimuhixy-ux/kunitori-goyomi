@@ -74,6 +74,7 @@ function rollDeaths(game, rand) {
     g.alive = false;
     const heir = g.lord ? G.succeed(game, g.clan) : null;
     if (g.clan !== game.player) continue;
+    if (g.lord) G.chronicle(game, `当主${g.name}が亡くなった。`);
     lines.push({ text: `${g.name}${g.lord ? '（当主）' : ''}が亡くなった。`, mine: true });
     if (g.lord) lines.push({ text: heir ? `${heir.name}が家督を継いだ。家臣の忠誠が下がった。` : '跡を継ぐ者がいない。', mine: true });
   }
@@ -100,9 +101,10 @@ function rollComingOfAge(game, rand) {
     const name = youngName(game, clan, rand);
     if (!name) continue;
     const stat = () => minStat + Math.floor(rand() * (maxStat - minStat + 1));
-    const g = { id: `young_${game.nextGeneral++}`, name, clan: clan.id, loc: home.id, alive: true, lead: stat(), admin: stat(), loyalty: game.data.rules.loyalty.max - 10, young: true };
+    const g = { id: `young_${game.nextGeneral++}`, name, clan: clan.id, loc: home.id, alive: true, lead: stat(), admin: stat(), loyalty: game.data.rules.loyalty.max - 10, young: true, skill: G.randomSkill(game, rand) };
     game.generals.push(g);
-    if (clan.id === game.player) lines.push({ text: `${home.name}：${g.name}が元服した（統率${g.lead}・政務${g.admin}）。`, mine: true });
+    const skill = g.skill ? `・特技 ${G.SKILLS[g.skill]}` : '';
+    if (clan.id === game.player) lines.push({ text: `${home.name}：${g.name}が元服した（統率${g.lead}・政務${g.admin}${skill}）。`, mine: true });
   }
   return lines;
 }
@@ -117,7 +119,10 @@ function rollDesertions(game, rand) {
     const mine = g.clan === game.player;
     if (enemy) Object.assign(g, { clan: enemy.clan, loc: enemy.id, loyalty: plotted });
     else g.alive = false;
-    if (mine) lines.push({ text: enemy ? `${g.name}が出奔し、${G.clanInfo(game, enemy.clan).name}家へ走った。` : `${g.name}が出奔した。`, mine: true });
+    if (!mine) continue;
+    const text = enemy ? `${g.name}が出奔し、${G.clanInfo(game, enemy.clan).name}家へ走った。` : `${g.name}が出奔した。`;
+    G.chronicle(game, text);
+    lines.push({ text, mine: true });
   }
   return lines;
 }

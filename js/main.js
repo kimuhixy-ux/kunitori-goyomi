@@ -234,6 +234,7 @@ function renderHome() {
     ...(state.log.length ? [el('h3', { text: '前の季節の出来事' }), logList(state.log)] : []),
     el('h3', { text: '諸大名' }),
     clanList(),
+    chronicleBox(),
   );
 }
 
@@ -252,8 +253,12 @@ const HELP = [
   ['移動', '兵の8割を隣の自分の国へ送る。「同行」で武将も連れて行ける。'],
   ['調略', '隣の敵国の家臣に寝返りを持ちかける。自分の国の武将の政務が高いほど成功しやすい。'],
   ['和睦', '隣の大名と1年間たがいに攻めない約束をする。相手より兵が多いほど応じやすい。断られても兵糧は減る。'],
+  ['同盟', '隣の大名と期限なしでたがいに攻めない約束をする。和睦より応じにくいが、和睦中なら話が進みやすい。攻められると隣の同盟国から援軍が来ることがある。相手がこちらより大きくなるほど、またこちらが包囲網を招くと、同盟を破って攻めてくることがある。こちらから手切れもできるが、家臣の忠誠が下がる。'],
+  ['婚姻', '同盟した相手と婚姻を結ぶ。援軍が多くなり、裏切られにくくなる。'],
   ['武将', '統率は合戦と守り、政務は開墾の費用・徴兵の人数・調略に効く。国にいる武将のうち一番得意な者の値が使われる。'],
   ['忠誠', '家臣には忠誠がある。低いと敵の調略に乗りやすく、30を切ると出奔（家を去ること）しやすい。年が改まるたびに少し下がり、兵糧が尽きたときや大将として負けたときにも下がる。勝てば上がる。'],
+  ['特技', '一部の武将は特技を持つ。築城（普請が安い）・開墾（開墾が安い）・調略（成功しやすい）・兵站（出陣の兵糧が半分）は国にいるだけで効く。鉄砲は大将なら攻めが、国にいれば守りが強くなる。夜戦は大将のとき夜襲が当たりやすい。元服した若武者も特技を持つことがある。'],
+  ['年表', '国の取り合い・家督・出奔・同盟などの出来事が記録される。ふだんは下の「年表」で、決着がつくと勝ち負けの数や領国の移り変わりと一緒に見られる。'],
   ['褒美', '兵糧を使い、その国でいちばん忠誠の低い家臣の忠誠を上げる。'],
   ['寿命', '年が進むほど武将は亡くなりやすくなる。当主が亡くなると家臣のひとりが家督を継ぎ、家臣の忠誠が下がる。春にはときどき若武者が元服して加わる。'],
   ['捕虜', '城を落としたとき、逃げ場のない武将を捕らえることがある。登用（家臣にする。忠誠は低い）・解放（家臣の忠誠が上がる）・処断（家臣の忠誠が下がる）から選ぶ。決めずに季節を進めると解き放つ。'],
@@ -373,8 +378,49 @@ function renderResult() {
   $panel.replaceChildren(
     el('p', { className: 'big', text: win ? '天下布武' : '落城' }),
     el('p', { text: win ? `${game.year}年、京を押さえ天下に号令した。` : `${game.year}年、${G.clanInfo(game, game.player).name}家は滅んだ。` }),
+    statsBox(),
+    el('h3', { text: '年表' }),
+    chronicleList(),
     el('button', { className: 'next', type: 'button', text: 'はじめから', onclick: () => start(true) }),
   );
+}
+
+// 何年かかったか、合戦の勝ち負け、領国の数の移り変わり
+function statsBox() {
+  const { game } = state;
+  const { won, lost, held, fell, history } = game.stats;
+  const years = game.year - game.data.rules.startYear;
+  const counts = [...history, { year: game.year, count: G.provincesOf(game, game.player).length }];
+  const max = Math.max(...counts.map((h) => h.count), 1);
+  return el('div', {}, [
+    el('div', { className: 'facts' }, [
+      el('span', { text: `${years}年` }),
+      el('span', { text: `攻め ${won}勝${lost}敗` }),
+      el('span', { text: `守り ${held}勝${fell}敗` }),
+    ]),
+    el('h3', { text: '領国の数' }),
+    el('ul', { className: 'bars' }, counts.filter((h, i) => i === 0 || h.year !== counts[i - 1].year).map((h) => el('li', {}, [
+      el('span', { className: 'bar-year', text: `${h.year}` }),
+      el('span', { className: 'bar', style: `width:${Math.max(2, (h.count / max) * 100)}%` }),
+      el('span', { className: 'bar-num', text: `${h.count}` }),
+    ]))),
+  ]);
+}
+
+// 新しい出来事が上に来るようにする。終わりまで遊んだあと、決着から振り返れるように
+function chronicleList() {
+  const { game } = state;
+  return el('ul', { className: 'lines' }, [...game.chronicle].reverse().map((c) => el('li', {}, [
+    el('span', { className: 'detail', text: `${c.year}年 ${game.data.rules.seasons[c.season]}` }),
+    c.text,
+  ])));
+}
+
+// 遊んでいる途中も年表を見られるよう、畳んで置いておく
+function chronicleBox() {
+  const box = el('details', { className: 'help' }, [el('summary', { text: `年表（${state.game.chronicle.length}件）` })]);
+  box.append(el('div', { className: 'chronicle' }, [chronicleList()]));
+  return box;
 }
 
 function provinceFacts(p) {
@@ -394,6 +440,8 @@ function provinceFacts(p) {
   if (p.heavySnow && G.snowedIn(game, p)) facts.push('大雪');
   const truce = p.clan === game.player ? 0 : G.truceLeft(game, game.player, p.clan);
   if (truce) facts.push(`和睦中（あと${truce}季節）`);
+  const link = p.clan === game.player ? null : G.allianceLink(game, game.player, p.clan);
+  if (link) facts.push(link.marriage ? '同盟・婚姻' : '同盟');
   return el('div', { className: 'facts' }, facts.map((f) => el('span', { text: f })));
 }
 
@@ -413,7 +461,8 @@ function generalLabel(g) {
   const { game } = state;
   const own = g.clan === game.player && !g.lord && !g.captive;
   const loyalty = own ? `・忠誠${g.loyalty}${g.loyalty < game.data.rules.loyalty.leave ? '（出奔のおそれ）' : ''}` : '';
-  return `${g.name}${g.lord ? '（当主）' : ''}　統率${g.lead}・政務${g.admin}${loyalty}`;
+  const skill = g.skill ? `・特技 ${G.SKILLS[g.skill]}` : '';
+  return `${g.name}${g.lord ? '（当主）' : ''}　統率${g.lead}・政務${g.admin}${skill}${loyalty}`;
 }
 
 // 国の働きは武将の能力で変わるので、敵の国でも誰がいるかは見せる
@@ -503,14 +552,50 @@ function diplomacyList(p, enemies) {
       G.canPlot(game, p, n), () => doPlot(p, n));
   });
   const clans = [...new Set(enemies.map((n) => n.clan))];
-  const truces = clans.map((c) => {
+  const truces = clans.filter((c) => !G.allied(game, game.player, c)).map((c) => {
     const left = G.truceLeft(game, game.player, c);
     const sub = left ? `和睦中（あと${left}季節）`
       : `兵糧 ${G.truceCost(game, c)}　応じる見込み ${pct(G.truceChance(game, game.player, c))}　1年間たがいに攻めない`;
     return cmdButton(`和睦：${G.clanInfo(game, c).name}家`, sub, G.canTruce(game, p, c), () => doTruce(p, c));
   });
-  const siege = G.underSiege(game, game.player) ? [el('p', { className: 'facts', text: '包囲網のさなか。どの家も和睦に応じない。' })] : [];
-  return [el('h3', { text: '外交' }), ...siege, el('div', { className: 'commands' }, [...plots, ...truces])];
+  const siege = G.underSiege(game, game.player) ? [el('p', { className: 'facts', text: '包囲網のさなか。どの家も和睦にも同盟にも応じない。' })] : [];
+  return [el('h3', { text: '外交' }), ...siege, el('div', { className: 'commands' }, [...plots, ...truces, ...clans.flatMap((c) => allianceButtons(p, c))])];
+}
+
+// 同盟していなければ同盟を、同盟していれば婚姻と手切れを出す
+function allianceButtons(p, clanId) {
+  const { game } = state;
+  const name = `${G.clanInfo(game, clanId).name}家`;
+  const link = G.allianceLink(game, game.player, clanId);
+  if (!link) {
+    return [cmdButton(`同盟：${name}`, `兵糧 ${G.allianceCost(game, clanId)}　応じる見込み ${pct(G.allianceChance(game, game.player, clanId))}　期限なし。攻められると援軍が来ることがある`,
+      G.canAlly(game, p, clanId), () => doAlly(p, clanId))];
+  }
+  const marriage = link.marriage ? [] : [cmdButton(`婚姻：${name}`, `兵糧 ${game.data.rules.alliance.marriageCost}　援軍が増え、裏切られにくくなる`, G.canMarry(game, p, clanId), () => doMarry(p, clanId))];
+  const warn = `裏切りの気配 ${pct(G.betrayChance(game, clanId, game.player))}／季節　命令は使わないが家臣の忠誠 -${game.data.rules.alliance.breakLoyalty}`;
+  return [...marriage, cmdButton(`手切れ：${name}`, warn, true, () => doBreak(clanId))];
+}
+
+function doAlly(p, clanId) {
+  const r = G.ally(state.game, p, clanId);
+  if (r === null) return;
+  const name = `${G.clanInfo(state.game, clanId).name}家`;
+  state.report = r
+    ? { head: '同盟が成った', lines: [`${name}と同盟した。たがいに攻めず、攻められれば援軍を出し合う。`] }
+    : { head: '同盟は断られた', lines: [`${name}は同盟に応じなかった。兵糧だけが減った。`] };
+  render();
+}
+
+function doMarry(p, clanId) {
+  if (!G.marry(state.game, p, clanId)) return;
+  state.report = { head: '婚姻が成った', lines: [`${G.clanInfo(state.game, clanId).name}家と婚姻を結んだ。援軍が増え、裏切られにくくなる。`] };
+  render();
+}
+
+function doBreak(clanId) {
+  if (!G.breakAlliance(state.game, state.game.player, clanId)) return;
+  state.report = { head: '同盟を破った', lines: [`${G.clanInfo(state.game, clanId).name}家との同盟を破った。家臣の忠誠が下がった。`] };
+  render();
 }
 
 function doPlot(p, n) {
@@ -569,10 +654,10 @@ function marchTarget(p, n) {
     return el('button', {
       className: 'cmd', type: 'button', disabled: !G.canMarch(game, p, n, ratio, state.tactic),
       onclick: () => doMarch(p, n, ratio),
-    }, [`${ratio === 0.5 ? '半数' : '8割'} ${fmt(size)}`, el('span', { className: `sub ${cls}`, text: `${label}・兵糧 ${G.marchCost(game, size, state.tactic)}` })]);
+    }, [`${ratio === 0.5 ? '半数' : '8割'} ${fmt(size)}`, el('span', { className: `sub ${cls}`, text: `${label}・兵糧 ${G.marchCost(game, size, state.tactic, p)}` })]);
   });
   const truce = G.truceLeft(game, p.clan, n.clan);
-  const snow = (G.snowedIn(game, n) || G.snowedIn(game, p) ? '　❄雪で動けない' : '') + (n.rain || p.rain ? '　長雨で動けない' : '') + (truce ? `　和睦中（あと${truce}季節）` : '');
+  const snow = (G.snowedIn(game, n) || G.snowedIn(game, p) ? '　❄雪で動けない' : '') + (n.rain || p.rain ? '　長雨で動けない' : '') + (truce ? `　和睦中（あと${truce}季節）` : '') + (G.allied(game, p.clan, n.clan) ? '　同盟中' : '');
   return el('div', { className: 'target' }, [
     el('div', { text: `${n.name}（${G.clanInfo(game, n.clan).name}家）守りの力 ${fmt(power)}${snow}` }),
     el('div', { className: 'row' }, buttons),
