@@ -23,8 +23,11 @@
     <dl id="status"></dl>
   </header>
   <main>
-    <div class="map-tools"><button id="zoom" class="tool" type="button">全国を見る</button></div>
-    <div id="map-wrap" class="map-wrap zoomed">
+    <div class="map-tools">
+      <button id="zoom-out" class="tool" type="button">－ 縮小</button>
+      <button id="zoom-in" class="tool" type="button">＋ 拡大</button>
+    </div>
+    <div id="map-wrap" class="map-wrap">
       <svg id="map" class="map" viewBox="4 22 248 246" role="img" aria-label="国の地図"></svg>
     </div>
     <section id="panel" class="panel"></section>

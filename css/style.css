@@ -86,8 +86,8 @@ main { max-width: 520px; margin: 0 auto; padding: 8px 16px 0; }
 /* 全国を一画面に収めると丸が小さすぎるので、拡大して指でずらして見る */
 .map-wrap { overflow: auto; max-height: 62vh; background: var(--sea); border-radius: 12px; -webkit-overflow-scrolling: touch; }
 .map { display: block; width: 100%; height: auto; }
-.map-wrap.zoomed .map { width: 250%; }
-.map-tools { display: flex; justify-content: flex-end; margin-bottom: 6px; }
+.map-tools { display: flex; justify-content: flex-end; gap: 6px; margin-bottom: 6px; }
+.tool:disabled { opacity: 0.45; }
 .map .land { fill: var(--land); stroke: var(--coast); stroke-width: 0.4; stroke-linejoin: round; }
 .map .lake { fill: var(--sea); stroke: var(--coast); stroke-width: 0.3; }
 .map .edge { stroke: var(--edge); stroke-width: 0.5; }

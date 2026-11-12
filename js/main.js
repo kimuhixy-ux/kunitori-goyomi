@@ -8,7 +8,7 @@ const DATA_FILES = { clans: 'data/clans.json', provinces: 'data/provinces.json',
 // 保存の形を変えたら番号を上げ、古い保存を読みこまないようにする
 const SAVE_KEY = 'kunitori-goyomi-save-v1';
 
-const state = { data: null, game: null, picking: false, zoomed: true, selectedId: null, log: [], report: null, confirmReset: false, commanderId: null, escortId: null };
+const state = { data: null, game: null, picking: false, zoom: 1, selectedId: null, log: [], report: null, confirmReset: false, commanderId: null, escortId: null };
 
 const $status = document.getElementById('status');
 const $map = document.getElementById('map');
@@ -16,7 +16,12 @@ const $panel = document.getElementById('panel');
 const $next = document.getElementById('next');
 const $reset = document.getElementById('reset');
 const $mapWrap = document.getElementById('map-wrap');
-const $zoom = document.getElementById('zoom');
+const $zoomIn = document.getElementById('zoom-in');
+const $zoomOut = document.getElementById('zoom-out');
+
+// ボタンで選べる倍率。1 は全国が一画面に収まる大きさ、2.5 は国を押しやすい大きさ
+const ZOOM_STEPS = [1, 1.6, 2.5, 4];
+const ZOOM_PLAY = 2.5;
 
 // 外部データを innerHTML に流さないよう、要素はすべてこの関数で作る
 function el(tag, props = {}, children = []) {
@@ -104,10 +109,16 @@ function centerOn(id) {
   $mapWrap.scrollTo({ left: (p.x - vb.x) * scale - $mapWrap.clientWidth / 2, top: (p.y - vb.y) * scale - $mapWrap.clientHeight / 2 });
 }
 
-function setZoom(on) {
-  state.zoomed = on;
-  $mapWrap.classList.toggle('zoomed', on);
-  $zoom.textContent = on ? '全国を見る' : '拡大する';
+// 倍率を変えても、いま画面の真ん中に見えている場所は真ん中のままにする
+function setZoom(level) {
+  const wrap = $mapWrap;
+  const fx = (wrap.scrollLeft + wrap.clientWidth / 2) / ($map.clientWidth || 1);
+  const fy = (wrap.scrollTop + wrap.clientHeight / 2) / ($map.clientHeight || 1);
+  state.zoom = Math.min(ZOOM_STEPS.at(-1), Math.max(ZOOM_STEPS[0], level));
+  $map.style.width = `${state.zoom * 100}%`;
+  wrap.scrollTo({ left: fx * $map.clientWidth - wrap.clientWidth / 2, top: fy * $map.clientHeight - wrap.clientHeight / 2 });
+  $zoomOut.disabled = state.zoom <= ZOOM_STEPS[0];
+  $zoomIn.disabled = state.zoom >= ZOOM_STEPS.at(-1);
 }
 
 function homeProvince() {
@@ -115,16 +126,30 @@ function homeProvince() {
   return mine.reduce((a, b) => (a.troops >= b.troops ? a : b), mine[0]);
 }
 
-function toggleZoom() {
-  setZoom(!state.zoomed);
-  const focus = state.selectedId ?? homeProvince()?.id;
-  if (state.zoomed && focus) centerOn(focus);
+// ピンチで中途半端な倍率になっていても、次の段へ進める
+function zoomStep(dir) {
+  const next = dir > 0 ? ZOOM_STEPS.find((z) => z > state.zoom + 0.01) : ZOOM_STEPS.findLast((z) => z < state.zoom - 0.01);
+  if (next) setZoom(next);
+}
+
+// iPhone の Safari は2本指の操作を gesture イベントで知らせる。地図の中だけ拡大し、ページ全体は拡大させない
+let pinchBase = 1;
+function watchPinch() {
+  $mapWrap.addEventListener('gesturestart', (e) => {
+    e.preventDefault();
+    pinchBase = state.zoom;
+  });
+  $mapWrap.addEventListener('gesturechange', (e) => {
+    e.preventDefault();
+    setZoom(pinchBase * e.scale);
+  });
+  $mapWrap.addEventListener('gestureend', (e) => e.preventDefault());
 }
 
 // 全国表示で国を押したら、その国を拡大して見せる
 function selectProvince(id) {
-  if (id && !state.zoomed && !state.picking) {
-    setZoom(true);
+  if (id && state.zoom === ZOOM_STEPS[0] && !state.picking) {
+    setZoom(ZOOM_PLAY);
     state.selectedId = id;
     state.report = null;
     render();
@@ -218,7 +243,7 @@ function clanButton(c, ps) {
 function pickClan(id) {
   Object.assign(state, { game: G.createGame(state.data, id), picking: false, selectedId: null, report: null, log: [] });
   render();
-  setZoom(true);
+  setZoom(ZOOM_PLAY);
   centerOn(homeProvince().id);
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -388,14 +413,16 @@ async function start(fresh = false) {
   if (saved?.game) G.restore(game, saved.game);
   Object.assign(state, { game, picking: !saved?.game, selectedId: null, report: null, log: saved?.log ?? [], confirmReset: false });
   // 大名選びは全国を見渡して選び、続きから遊ぶときは自分の国を拡大して見せる
-  setZoom(!state.picking);
+  setZoom(state.picking ? ZOOM_STEPS[0] : ZOOM_PLAY);
   render();
   if (!state.picking && homeProvince()) centerOn(homeProvince().id);
 }
 
 $next.addEventListener('click', nextSeason);
 $reset.addEventListener('click', onReset);
-$zoom.addEventListener('click', toggleZoom);
+$zoomIn.addEventListener('click', () => zoomStep(1));
+$zoomOut.addEventListener('click', () => zoomStep(-1));
+watchPinch();
 start();
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
