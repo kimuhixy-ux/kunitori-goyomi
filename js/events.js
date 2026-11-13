@@ -150,5 +150,6 @@ export function clearSeasonEffects(game) {
   for (const p of game.provinces) {
     p.rain = false;
     p.heavySnow = false;
+    p.insider = false;
   }
 }

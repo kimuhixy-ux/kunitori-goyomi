@@ -34,9 +34,12 @@ function aggressionOf(game, clanId) {
 }
 
 // 包囲網のさなかは、プレイヤーの国を少ない兵力差でも攻める
+// 京を持つ家は天下をうかがう者として狙われ、縁組を断られた家は恨みから攻めかかりやすい
 function aggressionAgainst(game, clanId, target) {
   const siege = G.underSiege(game, target.clan) ? game.data.rules.siege.aggression : 1;
-  return aggressionOf(game, clanId) * siege;
+  const kyoto = G.capitalHolder(game) === target.clan ? game.data.rules.court.target : 1;
+  const grudge = target.clan === game.player && G.grudgeLeft(game, clanId) > 0 ? game.data.rules.choice.grudge : 1;
+  return aggressionOf(game, clanId) * siege * kyoto * grudge;
 }
 
 // 包囲網のさなかはプレイヤーの国を先に狙う。そうでなければいちばん守りの弱い国

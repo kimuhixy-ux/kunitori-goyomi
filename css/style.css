@@ -221,3 +221,7 @@ main { max-width: 520px; margin: 0 auto; padding: 8px 16px 0; }
 .cmd .stars { float: right; font-size: 13px; letter-spacing: 1px; color: var(--good); }
 .cmd .stars-3 { color: var(--muted); }
 .cmd .stars-4, .cmd .stars-5 { color: var(--warn); }
+
+/* お伺いは答えを二つ並べ、どちらも押しやすい大きさにする */
+.choice .row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 6px 0 10px; }
+.choice .cmd { text-align: center; font-weight: 700; }

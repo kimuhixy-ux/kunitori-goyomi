@@ -16,6 +16,8 @@ export function createGame(data, playerId = data.clans.find((c) => c.player).id)
   const name = data.clans.find((c) => c.id === playerId).name;
   return {
     data, provinces, clans, generals, truces: {}, alliances: {}, nextGeneral: 1, player: playerId, year, season: 0, result: null,
+    treasures: data.rules.treasure.items.map((t) => ({ name: t.name, kind: t.kind, owner: t.owner ?? null, given: null })),
+    favors: {}, grudges: {}, court: 0, pending: null,
     chronicle: [{ year, season: 0, text: `${name}家の当主として天下をめざす。` }],
     stats: { won: 0, lost: 0, held: 0, fell: 0, history: [{ year, count: provinces.filter((p) => p.clan === playerId).length }] },
   };
@@ -70,7 +72,12 @@ export function snapshot(game) {
     chronicle: game.chronicle,
     stats: game.stats,
     nextGeneral: game.nextGeneral,
-    provinces: game.provinces.map(({ id, clan, koku, troops, castle, unrest, acted, busy, crop, rain, heavySnow }) => ({ id, clan, koku, troops, castle, unrest, acted, busy, crop, rain, heavySnow })),
+    treasures: game.treasures,
+    favors: game.favors,
+    grudges: game.grudges,
+    court: game.court,
+    pending: game.pending,
+    provinces: game.provinces.map(({ id, clan, koku, troops, castle, unrest, acted, busy, crop, rain, heavySnow, insider }) => ({ id, clan, koku, troops, castle, unrest, acted, busy, crop, rain, heavySnow, insider })),
     // 元服した武将は data/generals.json にいないので、名前や能力ごと保存する
     generals: game.generals.map(({ id, name, clan, loc, alive, lead, admin, lord, loyalty, captive, young, skill }) => ({ id, name, clan, loc, alive, lead, admin, lord, loyalty, captive, young, skill })),
   };
@@ -82,6 +89,9 @@ export function restore(game, snap) {
   if (snap.alliances) game.alliances = snap.alliances;
   if (snap.chronicle) game.chronicle = snap.chronicle;
   if (snap.stats) game.stats = snap.stats;
+  // 名物・お伺い・朝廷が入る前の保存では、始めたときの値のまま
+  if (snap.treasures) game.treasures = snap.treasures;
+  Object.assign(game, { favors: snap.favors ?? {}, grudges: snap.grudges ?? {}, court: snap.court ?? 0, pending: snap.pending ?? null });
   for (const [id, c] of Object.entries(snap.clans)) {
     if (game.clans[id]) Object.assign(game.clans[id], c);
   }
@@ -263,7 +273,8 @@ export function sorties(game, to, size, command) {
 export function defenseFactor(game, p, sortie = false) {
   const { castleBonus, busyDefense } = game.data.rules;
   const gun = hasSkill(game, p, 'gun') ? game.data.rules.skills.gun : 1;
-  return (1 + (sortie ? 0 : castleBonus * p.castle)) * (isBusySeason(game) ? busyDefense : 1) * leadFactor(bestStat(game, p, 'lead')) * gun;
+  const insider = p.insider ? game.data.rules.choice.insiderDefense : 1;
+  return (1 + (sortie ? 0 : castleBonus * p.castle)) * (isBusySeason(game) ? busyDefense : 1) * leadFactor(bestStat(game, p, 'lead')) * gun * insider;
 }
 
 // 勝算の目安にも使う
@@ -307,7 +318,27 @@ export function march(game, from, to, ratio, rand = Math.random, commanderId = n
   // 国を奪われた記録のあとに滅亡を書くよう、年表への記録を先にする
   recordBattle(game, report);
   updateAlive(game, defender);
+  if (!game.clans[defender].alive) report.lines.push(...takeTreasures(game, defender, attacker));
+  if (result.won && attacker === game.player && rand() < game.data.rules.treasure.spoil) report.lines.push(...findSpoil(game, to));
   return report;
+}
+
+// 滅ぼした家の名物は、滅ぼした家のものになる
+function takeTreasures(game, loser, winner) {
+  const won = treasuresOf(game, loser);
+  for (const t of won) t.owner = winner;
+  if (winner !== game.player) return [];
+  for (const t of won) chronicle(game, `${clanInfo(game, loser).name}家の名物「${t.name}」を手に入れた。`);
+  return won.map((t) => `名物「${t.name}」（${t.kind}）を手に入れた。`);
+}
+
+// 落とした城の蔵から、ときどき名物が見つかる
+function findSpoil(game, p) {
+  const t = marketTreasures(game)[0];
+  if (!t) return [];
+  t.owner = game.player;
+  chronicle(game, `${p.name}の城中で名物「${t.name}」を見つけた。`);
+  return [`城中で名物「${t.name}」（${t.kind}）を見つけた。`];
 }
 
 // 同盟した家の隣の国から援軍が来る。婚姻を結んでいれば多めに出してくれる
@@ -539,7 +570,12 @@ export function reward(game, p) {
 
 // 天下を取りかけた家には、まわりの大名が手を組んで当たる
 export function underSiege(game, clanId) {
-  return clanId === game.player && provincesOf(game, clanId).length >= game.data.rules.siege.provinces;
+  return clanId === game.player && provincesOf(game, clanId).length >= siegeThreshold(game);
+}
+
+// 朝廷の後ろ盾がある家に弓を引くと逆賊の汚名を着るので、包囲網に加わる家が出にくくなる
+export function siegeThreshold(game) {
+  return game.data.rules.siege.provinces + game.court * game.data.rules.court.siegeDelay;
 }
 
 export function truceCost(game, other) {
@@ -550,7 +586,7 @@ export function truceCost(game, other) {
 export function truceChance(game, clanId, other) {
   if (underSiege(game, clanId)) return 0;
   const ratio = troopsOf(game, clanId) / Math.max(1, troopsOf(game, other));
-  return Math.min(0.8, Math.max(0.1, 0.3 + (ratio - 1) * 0.3));
+  return Math.min(0.8, Math.max(0.1, 0.3 + (ratio - 1) * 0.3) + diplomacyBonus(game, clanId, other));
 }
 
 export function canTruce(game, from, other) {
@@ -586,7 +622,7 @@ export function allianceChance(game, clanId, other) {
   const { base, truceBonus, max } = game.data.rules.alliance;
   const ratio = troopsOf(game, clanId) / Math.max(1, troopsOf(game, other));
   const truceNow = truceLeft(game, clanId, other) > 0 ? truceBonus : 0;
-  return Math.min(max, Math.max(0.05, base + (ratio - 1) * 0.2 + truceNow));
+  return Math.min(max, Math.max(0.05, base + (ratio - 1) * 0.2 + truceNow) + diplomacyBonus(game, clanId, other));
 }
 
 export function canAlly(game, from, other) {
@@ -655,6 +691,108 @@ export function cpuAlly(game, clanId, rand) {
   return partner;
 }
 
-function allyCount(game, clanId) {
+export function allyCount(game, clanId) {
   return Object.keys(game.alliances).filter((k) => k.split('|').includes(clanId)).length;
+}
+
+// 申し入れを受けて結ぶ縁組。命令も兵糧も使わない
+export function acceptMarriage(game, other) {
+  game.alliances[truceKey(game.player, other)] = { marriage: true };
+  chronicle(game, `${clanInfo(game, other).name}家からの縁組を受け、婚姻同盟を結んだ。`);
+}
+
+// 縁組を断られた家の恨みが残る季節数
+export function grudgeLeft(game, clanId) {
+  return Math.max(0, (game.grudges[clanId] ?? 0) - turnIndex(game));
+}
+
+// 名物。持ち主の家を記録する。家臣に与えた名物は市中から消える
+export function treasuresOf(game, clanId) {
+  return game.treasures.filter((t) => t.owner === clanId);
+}
+
+export function canBestow(game, p) {
+  return !p.acted && rewardTarget(game, p) !== null && treasuresOf(game, p.clan).length > 0;
+}
+
+// 名物を与えるのは褒美より重い恩賞なので、忠誠が大きく上がる
+export function bestow(game, p) {
+  if (!canBestow(game, p)) return null;
+  const target = rewardTarget(game, p);
+  const t = treasuresOf(game, p.clan)[0];
+  Object.assign(t, { owner: null, given: target.name });
+  target.loyalty = clampLoyalty(game, target.loyalty + game.data.rules.treasure.loyalty);
+  p.acted = true;
+  chronicle(game, `名物「${t.name}」を${target.name}に与えた。`);
+  return { target, treasure: t };
+}
+
+export function favorLeft(game, clanId) {
+  return Math.max(0, (game.favors[clanId] ?? 0) - turnIndex(game));
+}
+
+export function canGift(game, from, other) {
+  return !from.acted && other !== from.clan && !allied(game, from.clan, other) && favorLeft(game, other) === 0 && treasuresOf(game, from.clan).length > 0;
+}
+
+// 名物を贈られた家は、しばらく和睦や同盟に応じやすくなる
+export function gift(game, from, other) {
+  if (!canGift(game, from, other)) return null;
+  const t = treasuresOf(game, from.clan)[0];
+  t.owner = other;
+  game.favors[other] = turnIndex(game) + game.data.rules.treasure.favorSeasons;
+  from.acted = true;
+  chronicle(game, `名物「${t.name}」を${clanInfo(game, other).name}家に贈った。`);
+  return t;
+}
+
+// 名物の贈り物と朝廷の後ろ盾は、プレイヤーの外交の見込みだけを押し上げる
+function diplomacyBonus(game, clanId, other) {
+  if (clanId !== game.player) return 0;
+  const favor = favorLeft(game, other) > 0 ? game.data.rules.treasure.favor : 0;
+  return favor + game.court * game.data.rules.court.chance;
+}
+
+export function canOffer(game, p) {
+  const { cost, max } = game.data.rules.court;
+  return !p.acted && Boolean(p.capital) && p.clan === game.player && game.court < max && game.clans[p.clan].rice >= cost;
+}
+
+// 京を治める家だけが朝廷に献上できる。後ろ盾は一段ずつ厚くなる
+export function offer(game, p) {
+  if (!canOffer(game, p)) return false;
+  game.clans[p.clan].rice -= game.data.rules.court.cost;
+  game.court += 1;
+  p.acted = true;
+  if (game.court === 1) chronicle(game, '朝廷に献上し、後ろ盾を得た。');
+  return true;
+}
+
+// 持ち主のいない名物は、港の商人の手にある
+export function marketTreasures(game) {
+  return game.treasures.filter((t) => t.owner === null && !t.given);
+}
+
+export function isPort(game, p) {
+  return game.data.rules.treasure.ports.includes(p.id);
+}
+
+export function canBuyTreasure(game, p) {
+  return !p.acted && isPort(game, p) && marketTreasures(game).length > 0 && game.clans[p.clan].rice >= game.data.rules.treasure.buyCost;
+}
+
+// 堺や博多のような港では、商人から名物を買い求められる
+export function buyTreasure(game, p) {
+  if (!canBuyTreasure(game, p)) return null;
+  const t = marketTreasures(game)[0];
+  game.clans[p.clan].rice -= game.data.rules.treasure.buyCost;
+  t.owner = p.clan;
+  p.acted = true;
+  chronicle(game, `${p.name}の商人から名物「${t.name}」を買い求めた。`);
+  return t;
+}
+
+// 京（山城）を持っている家
+export function capitalHolder(game) {
+  return province(game, game.data.rules.victory.capital).clan;
 }
