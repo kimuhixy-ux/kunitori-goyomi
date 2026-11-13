@@ -3,6 +3,7 @@ import * as G from './game.js';
 import { cpuTurn } from './ai.js';
 import { seasonEvents, clearSeasonEffects } from './events.js';
 import { rollChoice, ignoreChoice } from './choices.js';
+import { updateQuest } from './quests.js';
 
 function fmt(n) {
   return n.toLocaleString('ja-JP');
@@ -122,6 +123,10 @@ export function endSeason(game, rand = Math.random) {
   // 秋は取れた米で兵を養うので、収穫を先にする
   if (game.season === game.data.rules.harvestSeason) lines.push(...harvest(game));
   lines.push(...payUpkeep(game), ...releaseLeftCaptives(game));
+  // 銭は港と街道から毎季節入る
+  for (const [id, clan] of Object.entries(game.clans)) {
+    if (clan.alive) clan.gold = (clan.gold ?? 0) + G.goldIncome(game, id);
+  }
   for (const p of game.provinces) {
     p.acted = false;
     if (p.unrest) p.unrest -= 1;
@@ -133,6 +138,7 @@ export function endSeason(game, rand = Math.random) {
   // 領国の数の移り変わりは年の初めに一度だけ記録する
   if (game.season === 0) game.stats.history.push({ year: game.year, count: G.provincesOf(game, game.player).length });
   judge(game);
+  lines.push(...updateQuest(game, rand));
   rollChoice(game, rand);
   return lines;
 }

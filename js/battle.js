@@ -37,25 +37,29 @@ export function fight(game, size, to, castle, rand, command = 1, plan = {}) {
     return { won: true, attackerLeft: side.attack, defenderLeft: 0, lines };
   }
   if (plan.tactic === 'night') nightRaid(game, side, plan, rand, lines);
+  // 経過を横棒で見せるため、日ごとの残り兵を残しておく（0日目は合戦の始まり）
+  const days = [{ attack: side.attack, defend: side.defend }];
   const mod = battlePlan(game, plan);
   for (let day = 1; day <= mod.rounds; day++) {
     const lossA = Math.min(side.attack, Math.round(side.defend * side.castle * battle.lossRate * mod.attackLoss * (0.6 + 0.8 * rand())));
     const lossD = Math.min(side.defend, Math.round(side.attack * command * battle.lossRate * mod.defendLoss * (0.6 + 0.8 * rand())));
     side.attack -= lossA;
     side.defend -= lossD;
+    days.push({ attack: side.attack, defend: side.defend });
     lines.push(`${day}日目　攻め手 -${fmt(lossA)}（残り${fmt(side.attack)}）／守り手 -${fmt(lossD)}（残り${fmt(side.defend)}）`);
     if (side.defend <= to.troops * battle.breakRatio) {
       lines.push('守り手が崩れた。城を落とした！');
-      return { won: true, attackerLeft: side.attack, defenderLeft: side.defend, lines };
+      return { won: true, attackerLeft: side.attack, defenderLeft: side.defend, lines, days };
     }
     if (side.attack <= size * battle.breakRatio) {
       // 城を出て戦った守り手は、崩れた攻め手をそのまま追い討てる
       const pursuit = plan.sortie ? Math.round(side.attack * tactics.pursuit) : 0;
       side.attack -= pursuit;
+      days[days.length - 1].attack = side.attack;
       lines.push(pursuit ? `攻め手が崩れ、追い討ちを受けた（-${fmt(pursuit)}）。` : '攻め手が崩れ、兵を引いた。');
-      return { won: false, attackerLeft: side.attack, defenderLeft: side.defend, lines };
+      return { won: false, attackerLeft: side.attack, defenderLeft: side.defend, lines, days };
     }
   }
   lines.push('城は落ちず、兵を引いた。');
-  return { won: false, attackerLeft: side.attack, defenderLeft: side.defend, lines };
+  return { won: false, attackerLeft: side.attack, defenderLeft: side.defend, lines, days };
 }

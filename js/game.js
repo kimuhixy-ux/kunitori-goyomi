@@ -9,7 +9,7 @@ export function createGame(data, playerId = data.clans.find((c) => c.player).id)
     provinces.find((p) => p.id === b).adj.push(a);
   }
   const clans = {};
-  for (const c of data.clans) clans[c.id] = { rice: 0, alive: true };
+  for (const c of data.clans) clans[c.id] = { rice: 0, gold: data.rules.commerce.start, alive: true };
   for (const p of provinces) clans[p.clan].rice += Math.round(p.koku * data.rules.startRicePerKoku);
   const generals = data.generals.map((g) => ({ ...g, alive: true, loyalty: g.lord ? null : startLoyalty(data, g.id), skill: startSkill(data, g.id) }));
   const year = data.rules.startYear;
@@ -17,7 +17,7 @@ export function createGame(data, playerId = data.clans.find((c) => c.player).id)
   return {
     data, provinces, clans, generals, truces: {}, alliances: {}, nextGeneral: 1, player: playerId, year, season: 0, result: null,
     treasures: data.rules.treasure.items.map((t) => ({ name: t.name, kind: t.kind, owner: t.owner ?? null, given: null })),
-    favors: {}, grudges: {}, court: 0, pending: null,
+    favors: {}, grudges: {}, court: 0, pending: null, quest: null,
     chronicle: [{ year, season: 0, text: `${name}家の当主として天下をめざす。` }],
     stats: { won: 0, lost: 0, held: 0, fell: 0, history: [{ year, count: provinces.filter((p) => p.clan === playerId).length }] },
   };
@@ -77,7 +77,8 @@ export function snapshot(game) {
     grudges: game.grudges,
     court: game.court,
     pending: game.pending,
-    provinces: game.provinces.map(({ id, clan, koku, troops, castle, unrest, acted, busy, crop, rain, heavySnow, insider }) => ({ id, clan, koku, troops, castle, unrest, acted, busy, crop, rain, heavySnow, insider })),
+    quest: game.quest,
+    provinces: game.provinces.map(({ id, clan, koku, troops, castle, unrest, acted, busy, crop, rain, heavySnow, insider, guns }) => ({ id, clan, koku, troops, castle, unrest, acted, busy, crop, rain, heavySnow, insider, guns })),
     // 元服した武将は data/generals.json にいないので、名前や能力ごと保存する
     generals: game.generals.map(({ id, name, clan, loc, alive, lead, admin, lord, loyalty, captive, young, skill }) => ({ id, name, clan, loc, alive, lead, admin, lord, loyalty, captive, young, skill })),
   };
@@ -91,7 +92,7 @@ export function restore(game, snap) {
   if (snap.stats) game.stats = snap.stats;
   // 名物・お伺い・朝廷が入る前の保存では、始めたときの値のまま
   if (snap.treasures) game.treasures = snap.treasures;
-  Object.assign(game, { favors: snap.favors ?? {}, grudges: snap.grudges ?? {}, court: snap.court ?? 0, pending: snap.pending ?? null });
+  Object.assign(game, { favors: snap.favors ?? {}, grudges: snap.grudges ?? {}, court: snap.court ?? 0, pending: snap.pending ?? null, quest: snap.quest ?? null });
   for (const [id, c] of Object.entries(snap.clans)) {
     if (game.clans[id]) Object.assign(game.clans[id], c);
   }
@@ -184,7 +185,8 @@ function leadFactor(lead) {
 // 鉄砲の特技を持つ大将は、撃ちかけで敵を崩しやすい
 export function attackFactor(game, p, commander = generalsIn(game, p)[0]) {
   const gun = commander?.skill === 'gun' ? game.data.rules.skills.gun : 1;
-  return leadFactor(commander?.lead ?? game.data.rules.generals.noneStat) * gun;
+  const guns = p.guns ? game.data.rules.commerce.gunAttack : 1;
+  return leadFactor(commander?.lead ?? game.data.rules.generals.noneStat) * gun * guns;
 }
 
 // 政務50で表どおりの費用。政務が高いほど安く、低いほど高くつく。開墾の特技があればさらに安い
@@ -274,7 +276,8 @@ export function defenseFactor(game, p, sortie = false) {
   const { castleBonus, busyDefense } = game.data.rules;
   const gun = hasSkill(game, p, 'gun') ? game.data.rules.skills.gun : 1;
   const insider = p.insider ? game.data.rules.choice.insiderDefense : 1;
-  return (1 + (sortie ? 0 : castleBonus * p.castle)) * (isBusySeason(game) ? busyDefense : 1) * leadFactor(bestStat(game, p, 'lead')) * gun * insider;
+  const guns = p.guns ? game.data.rules.commerce.gunDefense : 1;
+  return (1 + (sortie ? 0 : castleBonus * p.castle)) * (isBusySeason(game) ? busyDefense : 1) * leadFactor(bestStat(game, p, 'lead')) * gun * insider * guns;
 }
 
 // 勝算の目安にも使う
@@ -395,7 +398,8 @@ function takeProvince(game, to, attacker, result) {
   const refuge = neighbors(game, to).find((n) => n.clan === to.clan);
   if (refuge) refuge.troops += result.defenderLeft;
   // 奪ったばかりの国は民が従わず、しばらく収穫が減り兵も集まらない
-  Object.assign(to, { clan: attacker, troops: result.attackerLeft, acted: true, busy: 0, unrest: game.data.rules.unrest.seasons });
+  // 鉄砲は守り手が持ち去るか壊すので、奪った国には残らない
+  Object.assign(to, { clan: attacker, troops: result.attackerLeft, acted: true, busy: 0, unrest: game.data.rules.unrest.seasons, guns: false });
 }
 
 // 城を落とされた国の武将は味方の国へ落ちのびる。逃げ場がなければ捕らえられる。
@@ -795,4 +799,48 @@ export function buyTreasure(game, p) {
 // 京（山城）を持っている家
 export function capitalHolder(game) {
   return province(game, game.data.rules.victory.capital).clan;
+}
+
+// 港と街道の国は、米とは別に銭を生む
+export function goldIncome(game, clanId) {
+  const { port, road, roads } = game.data.rules.commerce;
+  return provincesOf(game, clanId).reduce((total, p) => total + (isPort(game, p) ? port : 0) + (roads.includes(p.id) ? road : 0), 0);
+}
+
+export function isRoad(game, p) {
+  return game.data.rules.commerce.roads.includes(p.id);
+}
+
+export function mercPlan(game, p) {
+  const { hireCostPer100, hireMax } = game.data.rules.commerce;
+  const amount = Math.max(0, Math.floor(Math.min(hireMax, troopCap(game, p) - p.troops) / 10) * 10);
+  return { amount, cost: Math.ceil((amount / 100) * hireCostPer100) };
+}
+
+// 雇い兵は百姓を田から引き離さないので、農繁期でも収穫は減らず、民心が乱れていても集まる
+export function canHireMercs(game, p) {
+  const plan = mercPlan(game, p);
+  return !p.acted && plan.amount >= 100 && game.clans[p.clan].gold >= plan.cost;
+}
+
+export function hireMercs(game, p) {
+  if (!canHireMercs(game, p)) return false;
+  const plan = mercPlan(game, p);
+  game.clans[p.clan].gold -= plan.cost;
+  p.troops += plan.amount;
+  p.acted = true;
+  return true;
+}
+
+export function canBuyGuns(game, p) {
+  return !p.acted && !p.guns && game.clans[p.clan].gold >= game.data.rules.commerce.gunCost;
+}
+
+// 鉄砲をそろえた国は、守りも、そこから出る攻めも強くなる
+export function buyGuns(game, p) {
+  if (!canBuyGuns(game, p)) return false;
+  game.clans[p.clan].gold -= game.data.rules.commerce.gunCost;
+  p.guns = true;
+  p.acted = true;
+  return true;
 }

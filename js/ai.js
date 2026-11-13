@@ -108,6 +108,18 @@ function tryRecruit(game, p) {
   return G.recruit(game, p);
 }
 
+// 銭が余っていれば、敵と接する国に鉄砲をそろえる
+function tryGuns(game, p) {
+  const front = enemyNeighbors(game, p).length > 0;
+  return front && game.clans[p.clan].gold >= game.data.rules.commerce.gunCost * 2 && G.buyGuns(game, p);
+}
+
+// 銭があれば、敵に脅かされている国で兵を雇う
+function tryHire(game, p) {
+  const threatened = enemyNeighbors(game, p).some((n) => G.marchSize(n, 0.8) > G.defensePower(game, p));
+  return threatened && G.hireMercs(game, p);
+}
+
 // 敵と接する国は、兵糧に余裕があれば城を固める。★3までにとどめ、残りは開墾に回す
 const AI_CASTLE_MAX = 3;
 function tryFortify(game, p) {
@@ -125,7 +137,7 @@ export function cpuTurn(game, clanId, rand) {
       reports.push(report);
       continue;
     }
-    if (tryReinforce(game, p) || tryRecruit(game, p) || tryFortify(game, p) || tryReward(game, p)) continue;
+    if (tryReinforce(game, p) || tryRecruit(game, p) || tryHire(game, p) || tryGuns(game, p) || tryFortify(game, p) || tryReward(game, p)) continue;
     const plot = tryPlot(game, p, rand);
     if (plot) {
       reports.push(plot);

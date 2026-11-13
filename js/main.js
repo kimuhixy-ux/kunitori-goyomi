@@ -4,6 +4,7 @@ import { endSeason } from './turn.js';
 import { renderMap } from './map.js';
 import { advise } from './advice.js';
 import { describeChoice, answerChoice } from './choices.js';
+import { questText, updateQuest } from './quests.js';
 
 const DATA_FILES = { clans: 'data/clans.json', provinces: 'data/provinces.json', rules: 'data/rules.json', coast: 'data/coast.json', generals: 'data/generals.json' };
 
@@ -53,6 +54,7 @@ function renderStatus() {
   const items = [
     ['暦', `${game.year}年 ${G.seasonName(game)}`],
     ['兵糧', fmt(game.clans[game.player].rice)],
+    ['銭', fmt(game.clans[game.player].gold ?? 0)],
     ['国', `${G.provincesOf(game, game.player).length} / ${game.data.rules.victory.provinces}`],
     ['兵', fmt(G.troopsOf(game, game.player))],
   ];
@@ -232,6 +234,7 @@ function renderHome() {
     el('p', { text: `目標：京（山城）を含めて${victory.provinces}か国を治める。自分の国（金の縁）を押して命令する。` }),
     helpBox(),
     ...choiceBox(),
+    ...(game.quest ? [el('p', { className: 'quest', text: `今年の課題：${questText(game, game.quest)}。果たせば兵糧 ${game.data.rules.quest.rice}・銭 ${game.data.rules.quest.gold}。` })] : []),
     ...(season ? [el('p', { text: season })] : []),
     ...houseFacts(),
     ...(G.underSiege(game, game.player) ? [el('p', { text: `包囲網：${G.siegeThreshold(game)}か国に達した家として、隣の大名が手を組んで狙ってくる。和睦にも応じない。` })] : []),
@@ -268,6 +271,7 @@ function houseFacts() {
   const owned = G.treasuresOf(game, game.player).map((t) => t.name);
   const facts = [];
   if (owned.length) facts.push(`名物：${owned.join('・')}`);
+  facts.push(`銭の収入：毎季節 ${G.goldIncome(game, game.player)}`);
   if (game.court > 0) facts.push(`朝廷の後ろ盾：${'◆'.repeat(game.court)}（和睦・同盟が通りやすく、包囲網は${G.siegeThreshold(game)}か国から）`);
   if (G.capitalHolder(game) === game.player) facts.push('京を治める家として、諸大名に狙われやすい');
   return facts.length ? [el('p', { className: 'facts', text: facts.join('　') })] : [];
@@ -321,6 +325,9 @@ const HELP = [
   ['軍師の進言', '自分の国を開くと、その国でやるとよい命令を軍師が理由つきで3つまで勧める。全体画面の「軍師の進言」には、まだ命令していない国ごとのいちばんのおすすめが急ぐ順に並び、押すとその国を開く。あくまで目安で、従わなくてもよい。'],
   ['年表', '国の取り合い・家督・出奔・同盟などの出来事が記録される。ふだんは下の「年表」で、決着がつくと勝ち負けの数や領国の移り変わりと一緒に見られる。'],
   ['褒美', '兵糧を使い、その国でいちばん忠誠の低い家臣の忠誠を上げる。'],
+  ['銭', '港（和泉・摂津・筑前・肥前・越前）と街道の国から、米とは別に毎季節入る。雇い兵（農繁期でも収穫が減らず、民心が乱れていても集まる）と鉄砲（その国の守りと、そこから出る攻めが強くなる。奪われると失う）に使う。'],
+  ['課題', '年の初めに「隣の国を取る」「国の数を増やす」などの課題が出る。2年以内に果たせば兵糧・銭と家臣の忠誠が上がる。果たせないと忠誠が少し下がる。'],
+  ['合戦の経過', '自分の合戦の報告では、日ごとの残り兵が横棒で順に出る。上が攻め手、下が守り手。'],
   ['お伺い', '季節の初めに、ときどき二択の相談が来る（縁組の申し入れ・家臣の不穏な動き・敵の城からの内応）。全体画面の上で答える。答えずに季節を進めると断ったことになる（家臣の件は捨て置く）。縁組を断った家は1年ほど攻めかかりやすくなる。内応は罠のこともある。'],
   ['名物', '茶器や刀の名物。港の国（堺の和泉・摂津・博多の筑前・肥前・越前）で買えるほか、城を落とすと見つかることがあり、家を滅ぼすとその家の名物を得る。家臣に与えると忠誠が大きく上がり（褒美より強い）、他家に贈るとしばらく和睦・同盟に応じやすくなる。'],
   ['朝廷', '京（山城）を治めると、山城で朝廷に献上できる（3段まで）。後ろ盾が厚いほど和睦・同盟が通りやすく、包囲網に加わる家が出にくくなる（包囲網の始まる国の数が増える）。ただし京を持つ家は諸大名に狙われやすい。'],
@@ -401,6 +408,8 @@ function clanButton(c, ps, star) {
 
 function pickClan(id) {
   Object.assign(state, { game: G.createGame(state.data, id), picking: false, selectedId: null, report: null, log: [] });
+  // 最初の年から目当てがあるよう、始めた時点で課題を出す
+  updateQuest(state.game, Math.random);
   render();
   setZoom(ZOOM_PLAY);
   centerOn(homeProvince().id);
@@ -413,10 +422,27 @@ function renderReport() {
   const captives = r.captives?.length ? captiveBox(G.province(state.game, r.toId)) : [];
   $panel.replaceChildren(
     el('h2', { text: head }),
+    ...battleChart(r),
     el('ul', { className: 'lines' }, r.lines.map((t) => el('li', { text: t }))),
     ...captives,
     backButton(),
   );
+}
+
+// 合戦の経過。日ごとの残り兵を横棒で一日ずつ順に出し、どこで崩れたかを目で追えるようにする
+function battleChart(r) {
+  if (!r.days || r.days.length < 2) return [];
+  const max = Math.max(r.days[0].attack, r.days[0].defend, 1);
+  const bar = (n, cls) => el('span', { className: `bar ${cls}`, style: `width:${Math.max(1, (n / max) * 100)}%` });
+  const rows = r.days.map((d, i) => el('li', { className: 'day', style: `animation-delay:${i * 0.45}s` }, [
+    el('span', { className: 'bar-year', text: i === 0 ? '始め' : `${i}日目` }),
+    el('span', { className: 'pair' }, [bar(d.attack, 'bar-attack'), bar(d.defend, 'bar-defend')]),
+    el('span', { className: 'bar-num', text: `${fmt(d.attack)}／${fmt(d.defend)}` }),
+  ]));
+  return [
+    el('p', { className: 'facts' }, [el('span', { className: 'key key-attack', text: '■ 攻め手' }), el('span', { className: 'key key-defend', text: '■ 守り手' })]),
+    el('ul', { className: 'bars battle' }, rows),
+  ];
 }
 
 // 捕らえた武将の処遇。合戦の報告からも、その国の画面からも決められる
@@ -513,7 +539,9 @@ function provinceFacts(p) {
   ];
   if (p.snow) facts.push('雪国');
   if (p.capital) facts.push('京');
-  if (G.isPort(game, p)) facts.push('港（名物が手に入る）');
+  if (G.isPort(game, p)) facts.push('港（名物が手に入る・銭が入る）');
+  if (G.isRoad(game, p)) facts.push('街道（銭が入る）');
+  if (p.guns) facts.push('鉄砲あり');
   if (p.insider) facts.push('内応あり（守りが弱い）');
   if (p.unrest) facts.push(`民心が乱れている（あと${p.unrest}季節）`);
   if (p.crop > 1) facts.push('豊作の見込み');
@@ -593,6 +621,7 @@ function internalList(p, busy) {
   return [
     ...growthButtons(p, busy),
     ...rewardButton,
+    ...commerceButtons(p),
     ...treasureButtons(p, target),
     ...courtButton(p),
   ];
@@ -610,6 +639,18 @@ function growthButtons(p, busy) {
       G.canRecruit(game, p), act(() => G.recruit(game, p))),
     cmdButton('築城', p.castle >= game.data.rules.fortify.max ? '城はもう最も堅い' : `兵糧 ${G.fortifyCost(game, p)} → 城 ★${p.castle + 1}（守りが強くなる）${busy}`,
       G.canFortify(game, p), act(() => G.fortify(game, p))),
+  ];
+}
+
+// 銭を使う命令。雇い兵は農繁期でも収穫を減らさない
+function commerceButtons(p) {
+  const { game } = state;
+  const plan = G.mercPlan(game, p);
+  const { gunCost, gunAttack, gunDefense } = game.data.rules.commerce;
+  const guns = p.guns ? '鉄砲はそろっている' : `銭 ${gunCost} → 守り ×${gunDefense}・この国から出る攻め ×${gunAttack}（国を奪われると失う）`;
+  return [
+    cmdButton('雇い兵', `銭 ${plan.cost} → 兵 +${fmt(plan.amount)}　農繁期でも収穫は減らない`, G.canHireMercs(game, p), act(() => G.hireMercs(game, p))),
+    cmdButton('鉄砲をそろえる', guns, G.canBuyGuns(game, p), act(() => G.buyGuns(game, p))),
   ];
 }
 

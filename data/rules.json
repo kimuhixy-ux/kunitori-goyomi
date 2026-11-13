@@ -32,5 +32,7 @@
   "treasure": { "buyCost": 150, "spoil": 0.15, "ports": ["izumi", "settsu", "chikuzen", "hizen", "echizen"], "loyalty": 40, "favor": 0.25, "favorSeasons": 4, "items": [{ "name": "九十九髪茄子", "kind": "茶入", "owner": "miyoshi" }, { "name": "平蜘蛛", "kind": "茶釜", "owner": "miyoshi" }, { "name": "初花", "kind": "茶入" }, { "name": "新田肩衝", "kind": "茶入" }, { "name": "楢柴肩衝", "kind": "茶入" }, { "name": "松島の壺", "kind": "茶壺" }, { "name": "三日月宗近", "kind": "太刀" }, { "name": "童子切安綱", "kind": "太刀" }, { "name": "大般若長光", "kind": "太刀" }, { "name": "不動行光", "kind": "短刀" }] },
   "choice": { "chance": 0.35, "grudgeSeasons": 4, "grudge": 0.85, "insiderCost": 30, "insiderTrue": 0.6, "insiderDefense": 0.6, "trapLoss": 0.15, "forgive": 10, "punish": 3 },
   "court": { "cost": 150, "max": 3, "chance": 0.08, "siegeDelay": 2, "target": 0.9 },
+  "commerce": { "start": 100, "port": 60, "road": 30, "roads": ["owari", "mino", "kitaomi", "minamiomi", "yamashiro", "mikawa", "totomi", "suruga", "sagami", "musashi", "harima", "bizen", "aki", "suo"], "hireCostPer100": 6, "hireMax": 1500, "gunCost": 250, "gunAttack": 1.15, "gunDefense": 1.2 },
+  "quest": { "seasons": 8, "extra": 3, "rice": 300, "gold": 200, "loyalty": 5, "fail": 3 },
   "victory": { "capital": "yamashiro", "provinces": 35 }
 }

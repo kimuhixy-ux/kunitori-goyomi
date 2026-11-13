@@ -72,7 +72,7 @@ body {
 
 .status dl {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 4px;
   margin: 0;
   max-width: 520px;
@@ -225,3 +225,20 @@ main { max-width: 520px; margin: 0 auto; padding: 8px 16px 0; }
 /* お伺いは答えを二つ並べ、どちらも押しやすい大きさにする */
 .choice .row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 6px 0 10px; }
 .choice .cmd { text-align: center; font-weight: 700; }
+
+/* 課題は季節の注意書きと見分けがつくよう、左に色の線を引く */
+.quest { border-left: 3px solid var(--mine); padding-left: 8px; }
+
+/* 合戦の経過。攻め手と守り手の棒を上下に重ね、一日ずつ順に現れるようにする */
+.bars.battle li { grid-template-columns: 3.2em 1fr 6.5em; }
+.pair { display: grid; gap: 2px; }
+.bar-attack { background: var(--accent); }
+.bar-defend { background: var(--edge); }
+.key-attack { color: var(--accent); }
+.key-defend { color: var(--edge); }
+.day { opacity: 0; animation: appear 0.3s forwards; }
+@keyframes appear { to { opacity: 1; } }
+/* 動きを減らす設定の端末では、最初から全部見せる */
+@media (prefers-reduced-motion: reduce) {
+  .day { opacity: 1; animation: none; }
+}
